@@ -94,6 +94,21 @@ function runPaired(rule, root, files) {
 
 // spec-clarity: a "categorização" do print do amigo, virada GATE. Conta marcadores de pendência
 // por spec ([NEEDS CLARIFICATION], TODO, ???) e reprova/avisa specs ainda ambíguas.
+// "Clarified" só conta se a seção ## Clarifications tiver CONTEÚDO real (não só o header do template
+// nem comentários HTML de dica). Antes /^##\s+Clarifications/ dava falso-positivo em stub não-clarificado.
+function clarHasContent(txt) {
+  const lines = txt.split('\n');
+  const i = lines.findIndex((l) => /^##\s+Clarifications\b/.test(l.trim()));
+  if (i < 0) return false;
+  for (let j = i + 1; j < lines.length; j++) {
+    const t = lines[j].trim();
+    if (t.startsWith('## ')) break;        // próxima seção
+    if (!t || t.startsWith('<!--')) continue; // linha vazia ou comentário-dica do template
+    return true;                           // conteúdo de verdade
+  }
+  return false;
+}
+
 export function specClarity(rule, root, files) {
   const sel = selectFiles(files, rule.include, rule.exclude);
   const markers = rule.markers || ['\\[NEEDS CLARIFICATION\\]', '\\bTODO\\b', '\\?\\?\\?'];
@@ -103,7 +118,7 @@ export function specClarity(rule, root, files) {
     const txt = fs.readFileSync(path.join(root, f), 'utf8');
     const pend = (txt.match(re) || []).length;
     const lines = txt.split('\n').length;
-    const hasClar = /^##\s+Clarifications/m.test(txt);
+    const hasClar = clarHasContent(txt);
     const title = (txt.match(/^#\s+(.+)$/m) || [])[1] || path.basename(f);
     rows.push({ file: f, title: title.trim(), pend, lines, hasClar });
   }
