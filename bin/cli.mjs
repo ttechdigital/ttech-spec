@@ -60,75 +60,109 @@ function cmdAgents() {
   console.log(`${C.grn}✓ slash commands${C.x} (re)gerados em .claude/commands/: ${agents.join('  ')}`);
 }
 
-function cmdAudit(argv) {
-  const config = loadConfig();
-  const results = runAudit(config, cwd);
-  let fails = 0, warns = 0;
-  for (const r of results) {
-    const mark = r.ok ? `${C.grn}OK  ${C.x}` : (r.severity === 'fail' ? `${C.red}FAIL${C.x}` : `${C.yel}WARN${C.x}`);
-    console.log(`${mark} ${C.b}${r.id}${C.x} ${C.dim}— ${r.detail}${C.x}`);
-    if (!r.ok) {
-      (r.hits || []).slice(0, argv.includes('-v') ? 999 : 5).forEach((h) => console.log(`       ${C.dim}${h}${C.x}`));
-      if (r.severity === 'fail') fails++; else warns++;
-    }
-  }
-  console.log(`\n${C.b}=== resumo ===${C.x}  fails: ${fails}  warns: ${warns}  (${results.length} regras)`);
-  process.exit(fails > 0 ? 1 : 0);
+// --- compute (dados puros, reusados por render humano + --json + state) ---
+
+function auditData() {
+  const results = runAudit(loadConfig(), cwd);
+  const rules = results.map((r) => ({ id: r.id, severity: r.severity, ok: r.ok, detail: r.detail, hits: r.hits || [] }));
+  const fails = rules.filter((r) => !r.ok && r.severity === 'fail').length;
+  const warns = rules.filter((r) => !r.ok && r.severity !== 'fail').length;
+  return { ok: fails === 0, fails, warns, total: rules.length, rules };
 }
 
-// clarify — replica a "categorização" do SDD (ranking por pendência) e ainda mostra o gate.
-function cmdClarify() {
+function clarifyData() {
   const config = loadConfig();
   const rule = (config.rules || []).find((r) => r.type === 'spec-clarity')
     || { id: 'spec-clarity', type: 'spec-clarity', include: ['.ttechspec/specs/**/*.md'], exclude: ['**/_template.md'] };
-  const res = specClarity(rule, cwd, walk(cwd));
-  const rows = res.rows || [];
-  if (rows.length === 0) { console.log('Nenhuma spec encontrada em .ttechspec/specs/.'); return; }
-  console.log(`${C.b}${rows.length} specs${C.x} — ordenadas por pendência (TODO / [NEEDS CLARIFICATION] / ???):\n`);
-  console.log(`${C.dim}  #  Pend  Linhas  Clar  Spec${C.x}`);
-  rows.forEach((r, i) => {
-    const clar = r.hasClar ? `${C.grn}sim ${C.x}` : `${C.yel}não ${C.x}`;
-    console.log(`  ${String(i + 1).padStart(2)}  ${String(r.pend).padStart(4)}  ${String(r.lines).padStart(6)}  ${clar}  ${r.title} ${C.dim}(${path.basename(r.file)})${C.x}`);
+  const rows = (specClarity(rule, cwd, walk(cwd)).rows || [])
+    .map((r) => ({ file: r.file, title: r.title, pending: r.pend, lines: r.lines, clarified: r.hasClar }));
+  const top = rows.find((r) => r.pending > 0) || null;
+  return { specs: rows, pendingTotal: rows.reduce((a, r) => a + r.pending, 0), resumeAt: top ? top.file : null };
+}
+
+function catalogData() {
+  const dir = path.join(cwd, '.ttechspec', 'modules');
+  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort() : [];
+  const modules = files.map((f) => {
+    const txt = fs.readFileSync(path.join(dir, f), 'utf8');
+    const slug = ((txt.match(/^\s*slug:\s*(.+)$/m) || [])[1] || '?').trim().replace(/['"]/g, '');
+    return { slug, file: f, hasSurface: /^\s*surface:/m.test(txt), hasHistory: /^\s*history:/m.test(txt) };
   });
-  const top = rows.find((r) => r.pend > 0);
-  console.log(top
-    ? `\n${C.dim}Mais ambígua: ${top.title} — comece por ela.${C.x}`
+  return { modules, total: modules.length, incomplete: modules.filter((m) => !m.hasSurface || !m.hasHistory).length };
+}
+
+const wantsJson = (argv) => argv.includes('--json');
+
+function cmdAudit(argv) {
+  const d = auditData();
+  if (wantsJson(argv)) { console.log(JSON.stringify(d, null, 2)); process.exit(d.fails > 0 ? 1 : 0); }
+  for (const r of d.rules) {
+    const mark = r.ok ? `${C.grn}OK  ${C.x}` : (r.severity === 'fail' ? `${C.red}FAIL${C.x}` : `${C.yel}WARN${C.x}`);
+    console.log(`${mark} ${C.b}${r.id}${C.x} ${C.dim}— ${r.detail}${C.x}`);
+    if (!r.ok) r.hits.slice(0, argv.includes('-v') ? 999 : 5).forEach((h) => console.log(`       ${C.dim}${h}${C.x}`));
+  }
+  console.log(`\n${C.b}=== resumo ===${C.x}  fails: ${d.fails}  warns: ${d.warns}  (${d.total} regras)`);
+  process.exit(d.fails > 0 ? 1 : 0);
+}
+
+// clarify — categorização do SDD (ranking por pendência) virada estado retomável.
+function cmdClarify(argv) {
+  const d = clarifyData();
+  if (wantsJson(argv)) { console.log(JSON.stringify(d, null, 2)); return; }
+  if (d.specs.length === 0) { console.log('Nenhuma spec encontrada em .ttechspec/specs/.'); return; }
+  console.log(`${C.b}${d.specs.length} specs${C.x} — ordenadas por pendência (TODO / [NEEDS CLARIFICATION] / ???):\n`);
+  console.log(`${C.dim}  #  Pend  Linhas  Clar  Spec${C.x}`);
+  d.specs.forEach((r, i) => {
+    const clar = r.clarified ? `${C.grn}sim ${C.x}` : `${C.yel}não ${C.x}`;
+    console.log(`  ${String(i + 1).padStart(2)}  ${String(r.pending).padStart(4)}  ${String(r.lines).padStart(6)}  ${clar}  ${r.title} ${C.dim}(${path.basename(r.file)})${C.x}`);
+  });
+  console.log(d.resumeAt
+    ? `\n${C.dim}Retomar por: ${path.basename(d.resumeAt)} (mais pendências).${C.x}`
     : `\n${C.grn}Todas as specs sem pendências.${C.x}`);
 }
 
 // catalog (codinome ROB 64): lista + valida o registro de módulos (.ttechspec/modules/*.yaml).
-function cmdCatalog() {
-  const dir = path.join(cwd, '.ttechspec', 'modules');
-  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)) : [];
-  if (files.length === 0) { console.log('Nenhum module.yaml em .ttechspec/modules/.'); return; }
-  console.log(`${C.b}${files.length} módulos${C.x} (.ttechspec/modules/):\n`);
+function cmdCatalog(argv) {
+  const d = catalogData();
+  if (wantsJson(argv)) { console.log(JSON.stringify(d, null, 2)); return; }
+  if (d.total === 0) { console.log('Nenhum module.yaml em .ttechspec/modules/.'); return; }
+  console.log(`${C.b}${d.total} módulos${C.x} (.ttechspec/modules/):\n`);
   console.log(`${C.dim}  Slug                    Surface  History  Arquivo${C.x}`);
-  let incompletos = 0;
-  for (const f of files.sort()) {
-    const txt = fs.readFileSync(path.join(dir, f), 'utf8');
-    const slug = ((txt.match(/^\s*slug:\s*(.+)$/m) || [])[1] || '?').trim().replace(/['"]/g, '');
-    const hasSurface = /^\s*surface:/m.test(txt);
-    const hasHistory = /^\s*history:/m.test(txt);
-    if (!hasSurface || !hasHistory) incompletos++;
-    const mk = (ok) => (ok ? `${C.grn}✓${C.x}` : `${C.yel}–${C.x}`);
-    console.log(`  ${slug.padEnd(22)}  ${mk(hasSurface)}        ${mk(hasHistory)}        ${C.dim}${f}${C.x}`);
-  }
-  console.log(`\n${C.b}=== ${files.length} módulos, ${incompletos} incompletos (sem surface/history) ===${C.x}`);
+  const mk = (ok) => (ok ? `${C.grn}✓${C.x}` : `${C.yel}–${C.x}`);
+  for (const m of d.modules) console.log(`  ${m.slug.padEnd(22)}  ${mk(m.hasSurface)}        ${mk(m.hasHistory)}        ${C.dim}${m.file}${C.x}`);
+  console.log(`\n${C.b}=== ${d.total} módulos, ${d.incomplete} incompletos (sem surface/history) ===${C.x}`);
+}
+
+// state — snapshot estruturado do repo pra a plataforma agregar ("onde cada sistema parou"),
+// independente do agente. Sempre JSON. project vem do config.
+function cmdState() {
+  let project = path.basename(cwd);
+  try { project = JSON.parse(fs.readFileSync(path.join(cwd, '.ttechspec', CONFIG), 'utf8')).project || project; } catch {}
+  const snapshot = {
+    project,
+    generatedAt: new Date().toISOString(),
+    gate: auditData(),
+    specs: clarifyData(),
+    catalog: catalogData(),
+  };
+  console.log(JSON.stringify(snapshot, null, 2));
 }
 
 const [, , cmd, ...rest] = process.argv;
 switch (cmd) {
   case 'init': cmdInit(); break;
   case 'audit': cmdAudit(rest); break;
-  case 'clarify': cmdClarify(); break;
-  case 'catalog': cmdCatalog(); break;
+  case 'clarify': cmdClarify(rest); break;
+  case 'catalog': cmdCatalog(rest); break;
+  case 'state': cmdState(); break;
   case 'agents': cmdAgents(); break;
   default:
     console.log(`${C.b}ttechspec${C.x} — gate de arquitetura como código + método spec→skill→convenção→audit→catálogo\n`);
     console.log('  ttechspec init      scaffolda .ttechspec/ + base + slash commands');
-    console.log('  ttechspec audit     roda o gate de sentinelas (exit!=0 reprova)');
-    console.log('  ttechspec clarify   ranqueia specs por pendência (estilo SDD)');
-    console.log('  ttechspec catalog   lista/valida o registro de módulos');
+    console.log('  ttechspec audit     roda o gate de sentinelas (exit!=0 reprova)   [--json]');
+    console.log('  ttechspec clarify   ranqueia specs por pendência (estilo SDD)      [--json]');
+    console.log('  ttechspec catalog   lista/valida o registro de módulos            [--json]');
+    console.log('  ttechspec state     snapshot JSON (gate+specs+catalog) p/ a plataforma agregar');
     console.log('  ttechspec agents    (re)gera os slash commands (/clarify, /ttechspec-audit)');
     console.log(`\n${C.dim}Método: docs/METHOD.md · Workflow: docs/WORKFLOW.md${C.x}`);
 }

@@ -51,7 +51,9 @@ node bin/cli.mjs init      # scaffolda .ttechspec/ (specs/ modules/ presets/ + c
 node bin/cli.mjs audit     # roda o gate — exit != 0 reprova
 node bin/cli.mjs clarify   # ranqueia specs por pendência
 node bin/cli.mjs catalog   # lista/valida .ttechspec/modules/*.yaml
+node bin/cli.mjs state     # snapshot JSON (gate+specs+catalog) p/ a plataforma agregar
 node bin/cli.mjs agents    # (re)gera slash commands em .claude/commands/ (/clarify, /ttechspec-audit)
+# audit/clarify/catalog aceitam --json
 ```
 
 Consumo (modelo Spec Kit, sem registry): `npx github:ttechdigital/ttech-spec <cmd>`.

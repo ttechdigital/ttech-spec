@@ -11,8 +11,12 @@ ttechspec init       # scaffolda .ttechspec/ (specs/ modules/ presets/ + config)
 ttechspec audit      # roda o gate de sentinelas — exit != 0 reprova (pre-commit + CI)
 ttechspec clarify    # ranqueia specs por pendência ([NEEDS CLARIFICATION]/TODO/???), estilo SDD
 ttechspec catalog    # lista/valida o registro de módulos (.ttechspec/modules/*.yaml)
+ttechspec state      # snapshot JSON (gate+specs+catalog) — a plataforma agrega "onde cada repo parou"
 ttechspec agents     # (re)gera os slash commands /clarify e /ttechspec-audit (Claude Code)
 ```
+
+`audit`/`clarify`/`catalog` aceitam `--json` (saída estruturada pra CI/ferramentas). O `state` é a
+memória durável e agent-independent: o estado (decisões, pendências, módulos) mora no repo, não na sessão.
 
 Uso diário recomendado: **slash commands no agente** (`/clarify`, `/ttechspec-audit`) — gerados pelo
 `init`/`agents` — ou o CLI curto. O `npx github:...` é o modo zero-install (CI / 1º teste).
