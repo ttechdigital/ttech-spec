@@ -1,0 +1,15 @@
+{
+  "_preset": "base",
+  "_doc": "Arquitetura base universal do TTech Spec. Vale pra qualquer stack. Consumidor estende com 'extends': ['base'].",
+  "rules": [
+    {
+      "id": "empty-catch",
+      "type": "forbidden-pattern",
+      "severity": "fail",
+      "description": "catch {} vazio engole erro",
+      "include": ["**/*.cs", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.java", "**/*.go"],
+      "exclude": ["**/tests/**", "**/Tests/**", "**/test/**", "**/__tests__/**", "**/node_modules/**"],
+      "pattern": "catch\\s*(\\([^)]*\\))?\\s*\\{\\s*\\}"
+    }
+  ]
+}

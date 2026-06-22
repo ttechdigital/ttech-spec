@@ -1,0 +1,25 @@
+{
+  "_preset": "web",
+  "_doc": "Arquitetura base front-end (Next/React/Tailwind). Estende 'base'. Globs amplos; consumidor sobrescreve por id.",
+  "extends": ["base"],
+  "rules": [
+    {
+      "id": "localstorage-token",
+      "type": "forbidden-pattern",
+      "severity": "fail",
+      "description": "token em localStorage (XSS) — use cookie httpOnly/sessão",
+      "include": ["**/*.ts", "**/*.tsx"],
+      "exclude": ["**/node_modules/**", "**/*.test.*"],
+      "pattern": "localStorage\\.(get|set)Item\\(['\"]token['\"]"
+    },
+    {
+      "id": "session-user-role",
+      "type": "forbidden-pattern",
+      "severity": "fail",
+      "description": "session.user.role (NextAuth expõe roles[]) — derive papel do array",
+      "include": ["**/*.ts", "**/*.tsx"],
+      "exclude": ["**/node_modules/**", "**/*.test.*"],
+      "pattern": "session\\.user\\.role\\b|\\buser\\?\\.role\\b"
+    }
+  ]
+}

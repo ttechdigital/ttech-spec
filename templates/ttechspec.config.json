@@ -1,0 +1,26 @@
+{
+  "$schema": "https://ttech.digital/ttechspec/config.schema.json",
+  "version": "0.1.0",
+  "project": "meu-projeto",
+  "_nota": "extends puxa a base do SEU repo (.ttechspec/presets/, semeada no init e sua pra editar). Adicione abaixo só o que é específico do projeto.",
+  "extends": ["base"],
+  "rules": [
+    {
+      "id": "empty-catch",
+      "type": "forbidden-pattern",
+      "severity": "fail",
+      "description": "catch {} vazio engole erro",
+      "include": ["**/*.cs", "**/*.ts", "**/*.js"],
+      "pattern": "catch\\s*(\\([^)]*\\))?\\s*\\{\\s*\\}"
+    },
+    {
+      "id": "spec-clarity",
+      "type": "spec-clarity",
+      "severity": "warn",
+      "description": "specs com pendência não resolvida",
+      "include": [".ttechspec/specs/**/*.md"],
+      "exclude": ["**/_template.md"],
+      "maxPending": 0
+    }
+  ]
+}

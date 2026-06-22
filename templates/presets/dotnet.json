@@ -1,0 +1,43 @@
+{
+  "_preset": "dotnet",
+  "_doc": "Arquitetura base .NET/ASP.NET Core. Estende 'base'. Globs amplos (**/*.cs); consumidor sobrescreve por id se precisar estreitar.",
+  "extends": ["base"],
+  "rules": [
+    {
+      "id": "ex-message-leak",
+      "type": "forbidden-pattern",
+      "severity": "fail",
+      "description": "ex.Message em response vaza interno",
+      "include": ["**/*.cs"],
+      "exclude": ["**/tests/**", "**/Tests/**"],
+      "pattern": "error\\s*=\\s*ex\\.Message"
+    },
+    {
+      "id": "new-httpclient",
+      "type": "forbidden-pattern",
+      "severity": "warn",
+      "description": "new HttpClient() — prefira IHttpClientFactory",
+      "include": ["**/*.cs"],
+      "exclude": ["**/tests/**", "**/Tests/**", "**/Migrations/**", "**/Program.cs"],
+      "pattern": "new HttpClient\\("
+    },
+    {
+      "id": "logger-interpolation",
+      "type": "forbidden-pattern",
+      "severity": "warn",
+      "description": "Log com $\"...\" — use template {Field}",
+      "include": ["**/*.cs"],
+      "exclude": ["**/tests/**", "**/Tests/**"],
+      "pattern": "_logger\\.Log(Information|Warning|Error|Debug|Trace|Critical)\\(\\$"
+    },
+    {
+      "id": "migration-designer",
+      "type": "paired-file",
+      "severity": "fail",
+      "description": "migration EF sem .Designer.cs (EF ignora silenciosamente)",
+      "primary": "**/Migrations/*.cs",
+      "exclude": ["**/*.Designer.cs", "**/*ModelSnapshot.cs"],
+      "companionSuffix": ".Designer.cs"
+    }
+  ]
+}
