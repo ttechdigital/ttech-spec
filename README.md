@@ -1,16 +1,21 @@
-# TTech Spec — CLI (PoC)
+# TTech Spec — CLI
 
-Produto-no-repo do método TTech Spec (`docs/TTECH-SPEC-METHOD.md`). **Moat**: enquanto Spec Kit /
-Kiro / OpenSpec fazem o *build loop* (spec → IA implementa), aqui o **gate REPROVA o PR** e o
-catálogo registra. Ver posicionamento em `docs/TTECH-SPEC-PRODUCT.md`.
+Produto-no-repo do método TTech Spec (ver [`docs/METHOD.md`](docs/METHOD.md) e
+[`docs/WORKFLOW.md`](docs/WORKFLOW.md)). **Moat**: enquanto Spec Kit / Kiro / OpenSpec fazem o
+*build loop* (spec → IA implementa), aqui o **gate REPROVA o PR** e o catálogo registra.
 
 ## Comandos
 
 ```bash
-ttechspec init       # scaffolda .ttechspec/ (specs/ commands/ modules/ conventions.md + config do gate)
+ttechspec init       # scaffolda .ttechspec/ (specs/ modules/ presets/ + config) + slash commands
 ttechspec audit      # roda o gate de sentinelas — exit != 0 reprova (pre-commit + CI)
 ttechspec clarify    # ranqueia specs por pendência ([NEEDS CLARIFICATION]/TODO/???), estilo SDD
+ttechspec catalog    # lista/valida o registro de módulos (.ttechspec/modules/*.yaml)
+ttechspec agents     # (re)gera os slash commands /clarify e /ttechspec-audit (Claude Code)
 ```
+
+Uso diário recomendado: **slash commands no agente** (`/clarify`, `/ttechspec-audit`) — gerados pelo
+`init`/`agents` — ou o CLI curto. O `npx github:...` é o modo zero-install (CI / 1º teste).
 
 ## A base é DO CONSUMIDOR (o produto é só o engine)
 
@@ -45,7 +50,7 @@ vale — pra um time compartilhar UMA base entre os repos DELE. Merge por `id`: 
 
 ## Módulos (razão social → nome fantasia, tema Star Fox)
 
-O produto é feito das próprias etapas do método (dogfooding). Codinomes em `docs/TTECH-SPEC-METHOD.md`:
+O produto é feito das próprias etapas do método (dogfooding). Codinomes em [`docs/METHOD.md`](docs/METHOD.md):
 
 | Razão social | Codinome | Papel |
 |---|---|---|
@@ -71,5 +76,5 @@ npx github:ttechdigital/ttech-spec init     # scaffolda .ttechspec/ no seu repo
 npx github:ttechdigital/ttech-spec audit    # roda o gate (use no pre-commit + CI)
 ```
 
-Pendente de produtizar: config em YAML, `catalog` (gera module.yaml), geração de comandos
-multi-agente (Claude/Copilot/Cursor), publicação opcional em registry.
+Feito: init/audit/clarify/catalog/agents, presets consumidor-owned, slash commands (Claude Code), MIT público.
+Roadmap: config em YAML, slash commands p/ Copilot/Cursor, publicação opcional em registry, pin por tag.

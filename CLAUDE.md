@@ -47,12 +47,15 @@ Reserva pra módulos futuros: Wolf (SaaS), Pigma (licenciamento), Katt (notifica
 ## Comandos
 
 ```bash
-node bin/cli.mjs init      # scaffolda .ttechspec/ (specs/ commands/ modules/ presets/ + config)
+node bin/cli.mjs init      # scaffolda .ttechspec/ (specs/ modules/ presets/ + config) + slash commands
 node bin/cli.mjs audit     # roda o gate — exit != 0 reprova
 node bin/cli.mjs clarify   # ranqueia specs por pendência
+node bin/cli.mjs catalog   # lista/valida .ttechspec/modules/*.yaml
+node bin/cli.mjs agents    # (re)gera slash commands em .claude/commands/ (/clarify, /ttechspec-audit)
 ```
 
 Consumo (modelo Spec Kit, sem registry): `npx github:ttechdigital/ttech-spec <cmd>`.
+Método completo: `docs/METHOD.md`. Workflow (spec→gate + TDD-as-spec): `docs/WORKFLOW.md`.
 
 ## Desenvolvimento
 
