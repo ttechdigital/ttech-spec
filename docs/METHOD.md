@@ -17,13 +17,11 @@ O catálogo registra o que existe. Nada depende de alguém lembrar.
 ## O ciclo
 
 ```
-   ┌──────────┐    ┌──────────┐    ┌─────────────┐    ┌──────────┐    ┌──────────────┐
-   │  SPEC    │ ─▶ │  SKILL   │ ─▶ │  CONVENÇÃO  │ ─▶ │  AUDIT   │ ─▶ │ CATÁLOGO     │
-   │ decisão  │    │ execução │    │   regra     │    │  gate    │    │ módulo+history│
-   └──────────┘    └──────────┘    └─────────────┘    └──────────┘    └──────────────┘
-        ▲                                                                     │
-        └──────────────── feedback (audit acha o errado → vira spec) ◀────────┘
+   SPEC   -->   SKILL   -->   CONVENÇÃO   -->   AUDIT   -->   CATÁLOGO
+ (decisão)   (execução)     (regra)         (gate)      (módulo + history)
 ```
+
+**Feedback (fecha o ciclo):** quando o **AUDIT** reprova um caso, isso vira uma nova **SPEC** — e o ciclo recomeça.
 
 1. **Spec** desenha o certo (decisão + contrato + anti-padrões).
 2. **Skill** automatiza o fluxo guiado que a spec descreve (slash command).
@@ -49,13 +47,13 @@ O catálogo registra o que existe. Nada depende de alguém lembrar.
 
 ```
 Tenho uma decisão de arquitetura nova?
-├── Cruza ≥3 módulos e erra fácil?           → SPEC
-│   ├── ...e tem um fluxo repetível?          → + SKILL
-│   └── ...e implica uma regra absoluta?      → + CONVENÇÃO
-│       └── ...detectável por padrão?         → + SENTINELA (gate)
-├── É de 1 módulo só?                          → module.yaml
-├── É uma regra curta e universal?             → CONVENÇÃO direto
-└── É trivial (código bem nomeado já diz)?     → não documentar
+- Cruza >=3 módulos e erra fácil?          -> SPEC
+    - ...e tem um fluxo repetível?         -> + SKILL
+    - ...e implica uma regra absoluta?     -> + CONVENÇÃO
+        - ...detectável por padrão?        -> + SENTINELA (gate)
+- É de 1 módulo só?                        -> module.yaml
+- É uma regra curta e universal?           -> CONVENÇÃO direto
+- É trivial (código bem nomeado já diz)?   -> não documentar
 ```
 
 Subir o nível só quando precisa. A maioria das mudanças não vira spec — vira linha no `module.yaml`
