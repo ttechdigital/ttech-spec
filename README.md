@@ -67,13 +67,18 @@ precisar de prompt.
 
 ## O gate = regras como dado
 
-`.ttechspec/ttechspec.config.json` lista as regras. Cinco tipos:
+`.ttechspec/ttechspec.config.json` lista as regras. Seis tipos:
 
 - **forbidden-pattern** — reprova se um padrão (regex) aparece. *Ex: catch vazio, segredo numa response.*
-- **baseline-count** — reprova se a contagem por arquivo sobe do baseline. *Ex: número de `[AllowAnonymous]`.*
+- **baseline-count** — reprova se a contagem sobe do baseline. Com `referenceBranch`, conta só o que **o PR introduziu** (ratchet diff-aware, à prova de burla). *Ex: número de `[AllowAnonymous]`.*
 - **paired-file** — cada arquivo X exige o irmão Y. *Ex: migration → `.Designer.cs`.*
 - **spec-clarity** — reprova specs com pendência não resolvida (`[NEEDS CLARIFICATION]`/TODO/???).
+- **spec-traceability** — reprova requisito (`FR-###`) sem task que o cubra; opcional `failOrphans` p/ task que cita requisito inexistente.
 - **script** — escape hatch: roda um comando, ok se o exit bate com o esperado.
+
+Toda regra aceita `severity` (`fail`/`warn`/`info`) e `because` (a razão, surfada na saída e no SARIF).
+
+**Saída & escape hatches.** `audit` aceita `--sarif` (SARIF 2.1.0 → GitHub Code Scanning + anotação inline no PR) e `--observe` (roda tudo sem reprovar, pra rollout). Pra aceitar uma violação de propósito, de forma auditável: supressão inline `// ttechspec-ignore: <rule-id>` (vive no diff) ou um `waivers` no config com **motivo obrigatório** e `expires` opcional (waiver expirado volta a reprovar). Nada disso é silencioso — o resumo conta waived/suprimidos.
 
 ## A base é do consumidor (o produto é só o engine)
 

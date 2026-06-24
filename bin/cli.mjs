@@ -117,7 +117,7 @@ function clarifyData() {
   const rule = (config.rules || []).find((r) => r.type === 'spec-clarity')
     || { id: 'spec-clarity', type: 'spec-clarity', include: ['.ttechspec/specs/**/*.md'], exclude: ['**/_template.md'] };
   const rows = (specClarity(rule, cwd, walk(cwd)).rows || [])
-    .map((r) => ({ file: r.file, title: r.title, pending: r.pend, lines: r.lines, clarified: r.hasClar, tasks: r.tasks, status: specStatus(r.tasks) }));
+    .map((r) => ({ file: r.file, title: r.title, pending: r.pend, lines: r.lines, clarified: r.hasClar, tasks: r.tasks, status: specStatus(r.tasks), trace: r.trace }));
   const top = rows.find((r) => r.pending > 0) || null;
   // rollup agregado (não é feature segregada — só somatórios derivados, igual pendingTotal)
   const rollup = rows.reduce((a, r) => {

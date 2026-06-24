@@ -37,10 +37,14 @@ Reserva pra módulos futuros: Wolf (SaaS), Pigma (licenciamento), Katt (notifica
 ## Tipos de regra (a API do gate — `src/engine.mjs`)
 
 - `forbidden-pattern` — reprova se um regex aparece (com `include`/`exclude` globs, `severity`).
-- `baseline-count` — reprova se a contagem por-linha sobe do `baseline` (`ignoreComments` pula comentários).
+- `baseline-count` — reprova se a contagem por-linha sobe do `baseline` (`ignoreComments` pula comentários). Com `referenceBranch`, conta só ocorrências em linhas novas vs a ref (ratchet diff-aware, git diff -U0).
 - `paired-file` — cada arquivo X exige o irmão Y (`companionSuffix`).
 - `spec-clarity` — ranqueia/reprova specs por marcadores de pendência (`[NEEDS CLARIFICATION]`/TODO/???).
+- `spec-traceability` — reprova requisito (`FR-`/`SC-`/`NFR-###` na seção `## Requirements`) sem task que o referencie; `maxUncovered`, `failOrphans`.
 - `script` — escape hatch: roda um comando, ok se exit == `expectExit`.
+
+Transversal a todos: `severity` (`fail`/`warn`/`info`), `because` (razão surfada na saída/SARIF), supressão inline
+`// ttechspec-ignore: <id>`, e `waivers` no config (motivo + `expires`). `audit` tem `--sarif` e `--observe`.
 
 `extends` em `ttechspec.config.json` herda presets do `.ttechspec/presets/` do consumidor (merge por `id`).
 

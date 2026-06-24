@@ -190,6 +190,48 @@ function parseTasks(txt) {
   return { total: items.length, done, open: items.length - done, items };
 }
 
+// traceability spec→task (gap #5): IDs de requisito (FR-/SC-/NFR-###) definidos na seção
+// ## Requirements e referenciados pelas tasks. Mede cobertura (requisito sem task = buraco) e
+// órfãos (task cita requisito inexistente). Whitespace de mercado: todos REPORTAM, ninguém BLOQUEIA.
+const REQ_ID = /\b((?:FR|SC|NFR)-\d+)\b/g;
+function sectionLines(txt, name) {
+  const lines = txt.split('\n');
+  const i = lines.findIndex((l) => new RegExp(`^##\\s+${name}\\b`, 'i').test(l.trim()));
+  if (i < 0) return [];
+  const out = [];
+  for (let j = i + 1; j < lines.length; j++) {
+    if (lines[j].trim().startsWith('## ')) break;
+    out.push(lines[j]);
+  }
+  return out;
+}
+function parseTrace(txt) {
+  const defined = [...new Set(sectionLines(txt, 'Requirements').join('\n').match(REQ_ID) || [])];
+  const referenced = new Set(sectionLines(txt, 'Tasks').join('\n').match(REQ_ID) || []);
+  const uncovered = defined.filter((id) => !referenced.has(id));
+  const orphans = [...referenced].filter((id) => !defined.includes(id));
+  return { defined: defined.length, covered: defined.length - uncovered.length, uncovered, orphans };
+}
+
+export function specTraceability(rule, root, files) {
+  const sel = selectFiles(files, rule.include, rule.exclude);
+  const maxUncovered = rule.maxUncovered ?? 0;
+  const rows = [];
+  for (const f of sel) {
+    const t = parseTrace(fs.readFileSync(path.join(root, f), 'utf8'));
+    rows.push({ file: f, ...t });
+  }
+  const offenders = rows.filter((r) => r.uncovered.length > maxUncovered || (rule.failOrphans && r.orphans.length));
+  const hits = offenders.flatMap((r) => [
+    ...r.uncovered.map((id) => `${r.file}: ${id} sem task`),
+    ...(rule.failOrphans ? r.orphans.map((id) => `${r.file}: task cita ${id} inexistente`) : []),
+  ]);
+  return {
+    ...mkResult(rule, 'warn', offenders.length === 0, `${offenders.length} spec(s) com requisito sem cobertura`, hits, 0),
+    rows,
+  };
+}
+
 export function specClarity(rule, root, files) {
   const sel = selectFiles(files, rule.include, rule.exclude);
   const markers = rule.markers || ['\\[NEEDS CLARIFICATION\\]', '\\bTODO\\b', '\\?\\?\\?'];
@@ -201,8 +243,9 @@ export function specClarity(rule, root, files) {
     const lines = txt.split('\n').length;
     const hasClar = clarHasContent(txt);
     const tasks = parseTasks(txt);
+    const trace = parseTrace(txt);
     const title = (txt.match(/^#\s+(.+)$/m) || [])[1] || path.basename(f);
-    rows.push({ file: f, title: title.trim(), pend, lines, hasClar, tasks });
+    rows.push({ file: f, title: title.trim(), pend, lines, hasClar, tasks, trace });
   }
   rows.sort((a, b) => b.pend - a.pend);
   const offenders = rows.filter((r) => r.pend > (rule.maxPending ?? 0));
@@ -233,6 +276,7 @@ const RUNNERS = {
   'baseline-count': runBaseline,
   'paired-file': runPaired,
   'spec-clarity': specClarity,
+  'spec-traceability': specTraceability,
   'script': runScript,
 };
 
