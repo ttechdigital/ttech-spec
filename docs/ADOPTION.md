@@ -1,6 +1,6 @@
 # Playbook de adoção — trazer um produto pra mesma página + migrar pro TTech Spec
 
-> Sequência testada na TTech Ex. **Não pule a Fase 0.** A ordem importa: primeiro a VERDADE
+> Sequência testada num produto real. **Não pule a Fase 0.** A ordem importa: primeiro a VERDADE
 > (código, não memória), depois limpar lixo e achar o estado real, e só então migrar. Adotar o gate
 > sobre um estado bagunçado só formaliza a bagunça.
 >
@@ -66,9 +66,9 @@
     ```bash
     npx --yes github:ttechdigital/ttech-spec#vX.Y.Z state > /tmp/state.json
     curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      --data @/tmp/state.json https://sua-plataforma.example/api/platform/architecture/state
+      --data @/tmp/state.json https://sua-plataforma.example/api/architecture/state
     ```
-    `$TOKEN` = PAT da plataforma (secret no CI). O produto vira um card em `/architecture/state`.
+    `$TOKEN` = um PAT da sua plataforma (secret no CI). O produto vira um card no agregador.
 
 ## Fase 3 — Loop vivo
 
