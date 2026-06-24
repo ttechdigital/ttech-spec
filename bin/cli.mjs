@@ -48,7 +48,7 @@ function cmdInit() {
   for (const p of fs.readdirSync(path.join(PKG, 'templates', 'presets'))) {
     fs.copyFileSync(path.join(PKG, 'templates', 'presets', p), path.join(base, 'presets', p));
   }
-  fs.writeFileSync(path.join(base, 'modules', '.gitkeep'), '');
+  fs.copyFileSync(path.join(PKG, 'templates', 'module.template.yaml'), path.join(base, 'modules', '_template.yaml'));
   const agents = genAgents();
   console.log(`${C.grn}✓ .ttechspec/ criado${C.x} (specs/ modules/ presets/ conventions.md ${CONFIG})`);
   console.log(`${C.grn}✓ slash commands${C.x} em .claude/commands/: ${agents.join('  ')}`);
@@ -103,23 +103,65 @@ function sarifData(d) {
   };
 }
 
+// status derivado das tasks (determinístico, à la BMAD sprint-status mas sem o drift deles): a própria
+// spec diz onde está, sem campo mantido na mão. Alimenta o rollup do visualizador multi-produto.
+function specStatus(t) {
+  if (!t || t.total === 0) return 'no-tasks';
+  if (t.done === 0) return 'backlog';
+  if (t.done < t.total) return 'in-progress';
+  return 'done';
+}
+
 function clarifyData() {
   const config = loadConfig();
   const rule = (config.rules || []).find((r) => r.type === 'spec-clarity')
     || { id: 'spec-clarity', type: 'spec-clarity', include: ['.ttechspec/specs/**/*.md'], exclude: ['**/_template.md'] };
   const rows = (specClarity(rule, cwd, walk(cwd)).rows || [])
-    .map((r) => ({ file: r.file, title: r.title, pending: r.pend, lines: r.lines, clarified: r.hasClar, tasks: r.tasks }));
+    .map((r) => ({ file: r.file, title: r.title, pending: r.pend, lines: r.lines, clarified: r.hasClar, tasks: r.tasks, status: specStatus(r.tasks) }));
   const top = rows.find((r) => r.pending > 0) || null;
-  return { specs: rows, pendingTotal: rows.reduce((a, r) => a + r.pending, 0), resumeAt: top ? top.file : null };
+  // rollup agregado (não é feature segregada — só somatórios derivados, igual pendingTotal)
+  const rollup = rows.reduce((a, r) => {
+    a[r.status] = (a[r.status] || 0) + 1;
+    a.tasksDone += r.tasks?.done || 0; a.tasksTotal += r.tasks?.total || 0;
+    return a;
+  }, { done: 0, 'in-progress': 0, backlog: 0, 'no-tasks': 0, tasksDone: 0, tasksTotal: 0 });
+  return { specs: rows, pendingTotal: rows.reduce((a, r) => a + r.pending, 0), resumeAt: top ? top.file : null, rollup };
+}
+
+// parse YAML minimalista (zero-dep): escalar `key: val` e lista (`key:` seguido de `- item`).
+function yamlScalar(txt, key) {
+  const m = txt.match(new RegExp(`^\\s*${key}:\\s*(.+)$`, 'm'));
+  return m ? m[1].trim().replace(/^['"]|['"]$/g, '') : null;
+}
+function yamlList(txt, key) {
+  const lines = txt.split('\n');
+  const i = lines.findIndex((l) => new RegExp(`^\\s*${key}:\\s*$`).test(l));
+  if (i < 0) {
+    const inline = txt.match(new RegExp(`^\\s*${key}:\\s*\\[(.+)\\]\\s*$`, 'm')); // forma inline [a, b]
+    return inline ? inline[1].split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean) : [];
+  }
+  const out = [];
+  for (let j = i + 1; j < lines.length; j++) {
+    const m = lines[j].match(/^\s*-\s+(.+)$/);
+    if (m) out.push(m[1].trim().replace(/^['"]|['"]$/g, ''));
+    else if (lines[j].trim() && !/^\s/.test(lines[j])) break; // saiu da indentação → fim da lista
+  }
+  return out;
 }
 
 function catalogData() {
   const dir = path.join(cwd, '.ttechspec', 'modules');
-  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort() : [];
+  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f) && !f.startsWith('_')).sort() : [];
   const modules = files.map((f) => {
     const txt = fs.readFileSync(path.join(dir, f), 'utf8');
-    const slug = ((txt.match(/^\s*slug:\s*(.+)$/m) || [])[1] || '?').trim().replace(/['"]/g, '');
-    return { slug, file: f, hasSurface: /^\s*surface:/m.test(txt), hasHistory: /^\s*history:/m.test(txt) };
+    const slug = (yamlScalar(txt, 'slug') || '?').trim();
+    // campos tipados + relações (à la Backstage) — viram grafo no visualizador multi-produto.
+    return {
+      slug, file: f,
+      owner: yamlScalar(txt, 'owner'), lifecycle: yamlScalar(txt, 'lifecycle'), type: yamlScalar(txt, 'type'),
+      dependsOn: yamlList(txt, 'dependsOn'), partOf: yamlList(txt, 'partOf'),
+      hasSurface: /^\s*surface:/m.test(txt), hasHistory: /^\s*history:/m.test(txt),
+    };
   });
   return { modules, total: modules.length, incomplete: modules.filter((m) => !m.hasSurface || !m.hasHistory).length };
 }
@@ -172,9 +214,12 @@ function cmdCatalog(argv) {
   if (wantsJson(argv)) { console.log(JSON.stringify(d, null, 2)); return; }
   if (d.total === 0) { console.log('Nenhum module.yaml em .ttechspec/modules/.'); return; }
   console.log(`${C.b}${d.total} módulos${C.x} (.ttechspec/modules/):\n`);
-  console.log(`${C.dim}  Slug                    Surface  History  Arquivo${C.x}`);
+  console.log(`${C.dim}  Slug                    Surf  Hist  Owner            Lifecycle  Relações${C.x}`);
   const mk = (ok) => (ok ? `${C.grn}✓${C.x}` : `${C.yel}–${C.x}`);
-  for (const m of d.modules) console.log(`  ${m.slug.padEnd(22)}  ${mk(m.hasSurface)}        ${mk(m.hasHistory)}        ${C.dim}${m.file}${C.x}`);
+  for (const m of d.modules) {
+    const rel = [...(m.dependsOn || []).map((x) => `→${x}`), ...(m.partOf || []).map((x) => `⊂${x}`)].join(' ') || `${C.dim}–${C.x}`;
+    console.log(`  ${m.slug.padEnd(22)}  ${mk(m.hasSurface)}     ${mk(m.hasHistory)}     ${(m.owner || '–').padEnd(15)}  ${(m.lifecycle || '–').padEnd(9)}  ${C.dim}${rel}${C.x}`);
+  }
   console.log(`\n${C.b}=== ${d.total} módulos, ${d.incomplete} incompletos (sem surface/history) ===${C.x}`);
 }
 

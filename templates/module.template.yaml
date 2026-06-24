@@ -1,0 +1,20 @@
+# Módulo no catálogo (codinome ROB 64). Um por módulo do sistema; o PR que toca o módulo atualiza.
+# Campos tipados + relações viram GRAFO no visualizador multi-produto (via `ttechspec state`).
+slug: meu-modulo
+owner: time-x                # quem é dono (time/squad) — pro scorecard por dono
+lifecycle: production        # experimental | production | deprecated
+type: service                # service | library | ui | job (livre, seu vocabulário)
+
+# Relações (à la Backstage) — o visualizador desenha as arestas entre módulos/produtos.
+dependsOn:                   # módulos/serviços dos quais este depende
+  - outro-modulo
+partOf:                      # sistema/domínio maior que contém este
+  - meu-sistema
+
+# Superfície pública do módulo (endpoints, comandos, eventos…). Presença vale pro `catalog`.
+surface:
+  - GET /exemplo
+
+# Histórico de decisões do módulo (append-only). Presença vale pro `catalog`.
+history:
+  - 2026-01-01: criado.
