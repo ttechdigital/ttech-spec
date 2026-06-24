@@ -1,13 +1,34 @@
 {
   "name": "@ttechdigital/ttechspec",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "description": "Gate de arquitetura como código (regras-como-dado que reprovam o PR) + método spec→skill→convenção→audit→catálogo. O consumidor é dono da base.",
   "type": "module",
-  "bin": { "ttechspec": "./bin/cli.mjs" },
-  "files": ["bin", "src", "templates", "README.md"],
-  "engines": { "node": ">=18" },
-  "keywords": ["spec-driven-development", "linter", "policy-as-code", "architecture", "governance", "gate", "ci", "ttech"],
-  "repository": { "type": "git", "url": "git+https://github.com/ttechdigital/ttech-spec.git" },
+  "bin": {
+    "ttechspec": "./bin/cli.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "templates",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "spec-driven-development",
+    "linter",
+    "policy-as-code",
+    "architecture",
+    "governance",
+    "gate",
+    "ci",
+    "ttech"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ttechdigital/ttech-spec.git"
+  },
   "author": "TTech",
   "license": "MIT"
 }

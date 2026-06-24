@@ -65,10 +65,42 @@ function cmdAgents() {
 
 function auditData() {
   const results = runAudit(loadConfig(), cwd);
-  const rules = results.map((r) => ({ id: r.id, severity: r.severity, ok: r.ok, detail: r.detail, hits: r.hits || [] }));
-  const fails = rules.filter((r) => !r.ok && r.severity === 'fail').length;
-  const warns = rules.filter((r) => !r.ok && r.severity !== 'fail').length;
-  return { ok: fails === 0, fails, warns, total: rules.length, rules };
+  const rules = results.map((r) => ({
+    id: r.id, severity: r.severity, ok: r.ok, detail: r.detail, hits: r.hits || [],
+    because: r.because || null, suppressed: r.suppressed || 0, waived: r.waived || null,
+  }));
+  const fails = rules.filter((r) => !r.ok && !r.waived && r.severity === 'fail').length;
+  const warns = rules.filter((r) => !r.ok && !r.waived && r.severity !== 'fail').length;
+  const waived = rules.filter((r) => !r.ok && r.waived).length;
+  const suppressed = rules.reduce((a, r) => a + (r.suppressed || 0), 0);
+  return { ok: fails === 0, fails, warns, waived, suppressed, total: rules.length, rules };
+}
+
+// SARIF 2.1.0 (--sarif): saída padrão que o GitHub Code Scanning ingere → anotação inline no PR.
+// Formatter puro sobre o auditData; nenhum dado novo. Diferencial: ArchUnit/dep-cruiser/Sonar não exportam.
+const SARIF_LEVEL = { fail: 'error', warn: 'warning', info: 'note' };
+function sarifData(d) {
+  const offenders = d.rules.filter((r) => !r.ok && !r.waived);
+  const ruleDescriptors = offenders.map((r) => ({
+    id: r.id, ...(r.because ? { shortDescription: { text: r.because } } : {}),
+  }));
+  const results = offenders.flatMap((r) => {
+    const level = SARIF_LEVEL[r.severity] || 'warning';
+    const locs = (r.hits.length ? r.hits : [r.detail]).map((h) => {
+      const m = String(h).match(/^(.+?):(\d+)$/);
+      return m
+        ? { physicalLocation: { artifactLocation: { uri: m[1] }, region: { startLine: Number(m[2]) } } }
+        : { physicalLocation: { artifactLocation: { uri: '.ttechspec/ttechspec.config.json' } } };
+    });
+    return locs.map((location) => ({
+      ruleId: r.id, level, message: { text: `${r.id} — ${r.detail}${r.because ? ` (${r.because})` : ''}` },
+      locations: [location],
+    }));
+  });
+  return {
+    $schema: 'https://json.schemastore.org/sarif-2.1.0.json', version: '2.1.0',
+    runs: [{ tool: { driver: { name: 'ttechspec', informationUri: 'https://github.com/ttechdigital/ttech-spec', rules: ruleDescriptors } }, results }],
+  };
 }
 
 function clarifyData() {
@@ -96,14 +128,23 @@ const wantsJson = (argv) => argv.includes('--json');
 
 function cmdAudit(argv) {
   const d = auditData();
-  if (wantsJson(argv)) { console.log(JSON.stringify(d, null, 2)); process.exit(d.fails > 0 ? 1 : 0); }
+  const observe = argv.includes('--observe'); // warn-mode global: roda tudo sem reprovar (rollout)
+  const exit = observe ? 0 : (d.fails > 0 ? 1 : 0);
+  if (argv.includes('--sarif')) { console.log(JSON.stringify(sarifData(d), null, 2)); process.exit(exit); }
+  if (wantsJson(argv)) { console.log(JSON.stringify(d, null, 2)); process.exit(exit); }
   for (const r of d.rules) {
-    const mark = r.ok ? `${C.grn}OK  ${C.x}` : (r.severity === 'fail' ? `${C.red}FAIL${C.x}` : `${C.yel}WARN${C.x}`);
-    console.log(`${mark} ${C.b}${r.id}${C.x} ${C.dim}— ${r.detail}${C.x}`);
-    if (!r.ok) r.hits.slice(0, argv.includes('-v') ? 999 : 5).forEach((h) => console.log(`       ${C.dim}${h}${C.x}`));
+    const mark = r.ok ? `${C.grn}OK  ${C.x}`
+      : r.waived ? `${C.dim}WAIV${C.x}`
+      : (r.severity === 'fail' ? `${C.red}FAIL${C.x}` : `${C.yel}WARN${C.x}`);
+    const extra = r.waived ? ` ${C.dim}(waiver: ${r.waived.reason || 'sem motivo'}${r.waived.expires ? ` até ${r.waived.expires}` : ''})${C.x}`
+      : (r.suppressed ? ` ${C.dim}(${r.suppressed} suprimido inline)${C.x}` : '');
+    console.log(`${mark} ${C.b}${r.id}${C.x} ${C.dim}— ${r.detail}${C.x}${extra}`);
+    if (r.because && !r.ok) console.log(`       ${C.dim}↳ ${r.because}${C.x}`);
+    if (!r.ok && !r.waived) r.hits.slice(0, argv.includes('-v') ? 999 : 5).forEach((h) => console.log(`       ${C.dim}${h}${C.x}`));
   }
-  console.log(`\n${C.b}=== resumo ===${C.x}  fails: ${d.fails}  warns: ${d.warns}  (${d.total} regras)`);
-  process.exit(d.fails > 0 ? 1 : 0);
+  const tail = `fails: ${d.fails}  warns: ${d.warns}  waived: ${d.waived}  suprimidos: ${d.suppressed}  (${d.total} regras)`;
+  console.log(`\n${C.b}=== resumo ===${C.x}  ${tail}${observe ? `  ${C.dim}[observe: não reprova]${C.x}` : ''}`);
+  process.exit(exit);
 }
 
 // clarify — categorização do SDD (ranking por pendência) virada estado retomável.
@@ -176,7 +217,7 @@ switch (cmd) {
   default:
     console.log(`${C.b}ttechspec${C.x} — gate de arquitetura como código + método spec→skill→convenção→audit→catálogo\n`);
     console.log('  ttechspec init      scaffolda .ttechspec/ + base + slash commands');
-    console.log('  ttechspec audit     roda o gate de sentinelas (exit!=0 reprova)   [--json]');
+    console.log('  ttechspec audit     roda o gate de sentinelas (exit!=0 reprova)   [--json|--sarif|--observe|-v]');
     console.log('  ttechspec clarify   ranqueia specs por pendência (estilo SDD)      [--json]');
     console.log('  ttechspec catalog   lista/valida o registro de módulos            [--json]');
     console.log('  ttechspec state     snapshot JSON (gate+specs+catalog) p/ a plataforma agregar');

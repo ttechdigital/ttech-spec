@@ -43,22 +43,48 @@ function matchAny(file, globs) {
   return globs.some((g) => globToRegex(g).test(file));
 }
 
+// Supressão inline auditável (convergência de mercado: Semgrep `# nosemgrep`, Sonar `//NOSONAR`,
+// OPA `exception`). Um hit na linha N é suprimido se a linha N ou N-1 tem
+// `ttechspec-ignore: <rule-id>[, <rule-id>...]` (ou `*` pra qualquer regra). Fica NO DIFF — revisável.
+function suppressed(lines, idx, ruleId) {
+  const re = /ttechspec-ignore(?:-next-line)?:\s*([\w*][\w\-,\s*]*)/;
+  const check = (s) => {
+    const m = s && s.match(re);
+    if (!m) return false;
+    const ids = m[1].split(',').map((x) => x.trim());
+    return ids.includes('*') || ids.includes(ruleId);
+  };
+  return check(lines[idx]) || check(lines[idx - 1]);
+}
+
 function selectFiles(allFiles, include, exclude) {
   return allFiles.filter((f) => matchAny(f, include) && !matchAny(f, exclude));
 }
 
-// --- runners por tipo de regra. Cada um retorna {id, severity, ok, detail, hits[]} ---
+// --- runners por tipo de regra. Cada um retorna {id, severity, ok, detail, hits[], because, suppressed} ---
+
+// Padroniza o resultado. severity: 'fail' (reprova), 'warn'/'info' (não reprova). `because` = razão
+// da regra (ArchUnit `.because()`) surfada na saída e no SARIF. `suppressed` = nº de hits ignorados inline.
+function mkResult(rule, defSeverity, ok, detail, hits, suppressedN) {
+  return {
+    id: rule.id, severity: rule.severity || defSeverity, ok, detail,
+    hits: ok ? [] : hits, because: rule.because || null, suppressed: suppressedN || 0,
+  };
+}
 
 function runForbidden(rule, root, files) {
   const sel = selectFiles(files, rule.include, rule.exclude);
-  const re = new RegExp(rule.pattern, rule.flags || 'g');
   const hits = [];
+  let skipped = 0;
   for (const f of sel) {
     const lines = fs.readFileSync(path.join(root, f), 'utf8').split('\n');
-    lines.forEach((ln, i) => { if (new RegExp(rule.pattern, rule.flags || '').test(ln)) hits.push(`${f}:${i + 1}`); });
+    lines.forEach((ln, i) => {
+      if (!new RegExp(rule.pattern, rule.flags || '').test(ln)) return;
+      if (suppressed(lines, i, rule.id)) { skipped++; return; }
+      hits.push(`${f}:${i + 1}`);
+    });
   }
-  void re;
-  return { id: rule.id, severity: rule.severity || 'fail', ok: hits.length === 0, detail: `${hits.length} ocorrência(s)`, hits };
+  return mkResult(rule, 'fail', hits.length === 0, `${hits.length} ocorrência(s)`, hits, skipped);
 }
 
 function runBaseline(rule, root, files) {
@@ -66,18 +92,20 @@ function runBaseline(rule, root, files) {
   // Contagem por LINHA (espelha 'grep -n | wc -l' dos sentinelas). ignoreComments pula linhas
   // de comentário (// ou *) — necessário pra baselines tipo client-hardcodes sem contar exemplos em doc.
   const re = new RegExp(rule.pattern);
-  let count = 0;
+  let count = 0, skipped = 0;
   const hits = [];
   for (const f of sel) {
     const lines = fs.readFileSync(path.join(root, f), 'utf8').split('\n');
     lines.forEach((ln, i) => {
       const t = ln.trim();
       if (rule.ignoreComments && (t.startsWith('//') || t.startsWith('*'))) return;
-      if (re.test(ln)) { count++; hits.push(`${f}:${i + 1}`); }
+      if (!re.test(ln)) return;
+      if (suppressed(lines, i, rule.id)) { skipped++; return; }
+      count++; hits.push(`${f}:${i + 1}`);
     });
   }
   const ok = count <= rule.baseline;
-  return { id: rule.id, severity: rule.severity || 'fail', ok, detail: `atual=${count} baseline=${rule.baseline}`, hits: ok ? [] : hits };
+  return mkResult(rule, 'fail', ok, `atual=${count} baseline=${rule.baseline}`, hits, skipped);
 }
 
 function runPaired(rule, root, files) {
@@ -89,7 +117,7 @@ function runPaired(rule, root, files) {
     const companion = f.replace(/\.[^.]+$/, '') + rule.companionSuffix;
     if (!set.has(companion)) hits.push(`${f} (falta ${path.basename(companion)})`);
   }
-  return { id: rule.id, severity: rule.severity || 'fail', ok: hits.length === 0, detail: `${hits.length} sem par`, hits };
+  return mkResult(rule, 'fail', hits.length === 0, `${hits.length} sem par`, hits, 0);
 }
 
 // spec-clarity: a "categorização" do print do amigo, virada GATE. Conta marcadores de pendência
@@ -145,9 +173,10 @@ export function specClarity(rule, root, files) {
   rows.sort((a, b) => b.pend - a.pend);
   const offenders = rows.filter((r) => r.pend > (rule.maxPending ?? 0));
   return {
-    id: rule.id, severity: rule.severity || 'warn', ok: offenders.length === 0,
-    detail: `${offenders.length} spec(s) com pendência > ${rule.maxPending ?? 0}`,
-    hits: offenders.map((r) => `${r.file} (${r.pend} pendências)`), rows,
+    ...mkResult(rule, 'warn', offenders.length === 0,
+      `${offenders.length} spec(s) com pendência > ${rule.maxPending ?? 0}`,
+      offenders.map((r) => `${r.file} (${r.pend} pendências)`), 0),
+    rows,
   };
 }
 
@@ -156,12 +185,12 @@ export function specClarity(rule, root, files) {
 function runScript(rule, root) {
   try {
     execSync(rule.run, { cwd: root, stdio: 'pipe', shell: '/bin/bash' });
-    return { id: rule.id, severity: rule.severity || 'fail', ok: (rule.expectExit ?? 0) === 0, detail: 'exit 0', hits: [] };
+    return mkResult(rule, 'fail', (rule.expectExit ?? 0) === 0, 'exit 0', [], 0);
   } catch (e) {
     const code = typeof e.status === 'number' ? e.status : 1;
     const ok = code === (rule.expectExit ?? 0);
     const tail = (e.stdout?.toString() || e.stderr?.toString() || '').trim().split('\n').slice(-3);
-    return { id: rule.id, severity: rule.severity || 'fail', ok, detail: `exit ${code}`, hits: ok ? [] : tail };
+    return mkResult(rule, 'fail', ok, `exit ${code}`, tail, 0);
   }
 }
 
@@ -196,14 +225,29 @@ export function resolveConfig(raw, { repoDir }) {
   return { ...raw, extends: undefined, rules: [...merged.values()] };
 }
 
+// Waivers: aceitar uma violação de propósito, de forma AUDITÁVEL (motivo obrigatório, expiração
+// opcional). Convergência: OPA `exception`, Sonar "won't fix". Vive no config como
+//   "waivers": [{ "rule": "no-empty-catch", "reason": "legado X, ticket TT-123", "expires": "2026-12-31" }]
+// Waiver expirado volta a reprovar (força revisão). Surfado separado no resumo — nunca silencioso.
+function activeWaiver(config, ruleId) {
+  const now = Date.now();
+  return (config.waivers || []).find((w) =>
+    w.rule === ruleId && (!w.expires || Date.parse(w.expires) >= now)) || null;
+}
+
 export function runAudit(config, root) {
   const files = walk(root);
   const results = [];
   for (const rule of config.rules || []) {
     const runner = RUNNERS[rule.type];
-    if (!runner) { results.push({ id: rule.id, severity: 'fail', ok: false, detail: `tipo desconhecido: ${rule.type}`, hits: [] }); continue; }
-    try { results.push(runner(rule, root, files)); }
-    catch (e) { results.push({ id: rule.id, severity: 'fail', ok: false, detail: `erro: ${e.message}`, hits: [] }); }
+    let result;
+    if (!runner) result = { id: rule.id, severity: 'fail', ok: false, detail: `tipo desconhecido: ${rule.type}`, hits: [], because: null, suppressed: 0 };
+    else { try { result = runner(rule, root, files); } catch (e) { result = { id: rule.id, severity: 'fail', ok: false, detail: `erro: ${e.message}`, hits: [], because: null, suppressed: 0 }; } }
+    if (!result.ok) {
+      const w = activeWaiver(config, rule.id);
+      if (w) result.waived = { reason: w.reason || '', expires: w.expires || null };
+    }
+    results.push(result);
   }
   return results;
 }
