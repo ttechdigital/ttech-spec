@@ -1,7 +1,7 @@
 # TTech Spec — CLI
 
 Produto-no-repo do método TTech Spec (ver [`docs/METHOD.md`](docs/METHOD.md) e
-[`docs/WORKFLOW.md`](docs/WORKFLOW.md)). **Moat**: enquanto Spec Kit / Kiro / OpenSpec fazem o
+[`docs/WORKFLOW.md`](docs/WORKFLOW.md)). Pra adotar num produto novo: [`docs/ADOPTION.md`](docs/ADOPTION.md) (playbook verdade→limpeza→migração). **Moat**: enquanto Spec Kit / Kiro / OpenSpec fazem o
 *build loop* (spec → IA implementa), aqui o **gate REPROVA o PR** e o catálogo registra.
 
 ## Comandos
