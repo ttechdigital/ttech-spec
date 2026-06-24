@@ -87,16 +87,47 @@ function runForbidden(rule, root, files) {
   return mkResult(rule, 'fail', hits.length === 0, `${hits.length} ocorrência(s)`, hits, skipped);
 }
 
+// Linhas ADICIONADAS vs uma branch de referência (git diff -U0). Map<file, Set<linha-no-novo>>.
+// Null se não há git/ref (→ runBaseline cai no modo contagem-total). Base do ratchet diff-aware:
+// em vez de um inteiro que deriva e dá pra burlar, conta só o que ESTE PR introduziu (Sonar "New Code").
+function addedLines(root, ref) {
+  let out;
+  try { out = execSync(`git diff --unified=0 --no-color ${ref} -- .`, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); }
+  catch { return null; }
+  const map = new Map();
+  let cur = null, newLine = 0;
+  for (const line of out.split('\n')) {
+    if (line.startsWith('+++ ')) {
+      const f = line.slice(4).replace(/^b\//, '').trim();
+      cur = f === '/dev/null' ? null : f;
+      if (cur && !map.has(cur)) map.set(cur, new Set());
+    } else if (line.startsWith('@@')) {
+      const m = line.match(/\+(\d+)/); newLine = m ? Number(m[1]) : 0;
+    } else if (line.startsWith('+') && !line.startsWith('+++')) {
+      if (cur) map.get(cur).add(newLine);
+      newLine++;
+    }
+  }
+  return map;
+}
+
 function runBaseline(rule, root, files) {
   const sel = selectFiles(files, rule.include, rule.exclude);
-  // Contagem por LINHA (espelha 'grep -n | wc -l' dos sentinelas). ignoreComments pula linhas
-  // de comentário (// ou *) — necessário pra baselines tipo client-hardcodes sem contar exemplos em doc.
+  // ignoreComments pula linhas de comentário (// ou *) — não contar exemplos em doc.
+  // referenceBranch ligado → conta SÓ ocorrências em linhas novas vs a ref (ratchet diff-aware,
+  // à prova de burla, auto-mantido). Sem isso → contagem-total por linha (modo legado, inteiro baseline).
   const re = new RegExp(rule.pattern);
+  const added = rule.referenceBranch ? addedLines(root, rule.referenceBranch) : null;
+  const diffMode = !!added;
+  const baseline = diffMode ? (rule.baseline ?? 0) : rule.baseline;
   let count = 0, skipped = 0;
   const hits = [];
   for (const f of sel) {
+    const set = diffMode ? added.get(f) : null;
+    if (diffMode && !set) continue; // arquivo não tocado pelo PR
     const lines = fs.readFileSync(path.join(root, f), 'utf8').split('\n');
     lines.forEach((ln, i) => {
+      if (diffMode && !set.has(i + 1)) return; // só linhas novas
       const t = ln.trim();
       if (rule.ignoreComments && (t.startsWith('//') || t.startsWith('*'))) return;
       if (!re.test(ln)) return;
@@ -104,8 +135,11 @@ function runBaseline(rule, root, files) {
       count++; hits.push(`${f}:${i + 1}`);
     });
   }
-  const ok = count <= rule.baseline;
-  return mkResult(rule, 'fail', ok, `atual=${count} baseline=${rule.baseline}`, hits, skipped);
+  const ok = count <= baseline;
+  const detail = diffMode
+    ? `novas=${count} (vs ${rule.referenceBranch}) baseline=${baseline}`
+    : `atual=${count} baseline=${baseline}`;
+  return mkResult(rule, 'fail', ok, detail, hits, skipped);
 }
 
 function runPaired(rule, root, files) {
