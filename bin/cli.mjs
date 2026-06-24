@@ -5,6 +5,7 @@
 // catálogo registra. Método em docs/METHOD.md, workflow em docs/WORKFLOW.md.
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { runAudit, resolveConfig, specClarity, walk } from '../src/engine.mjs';
 
@@ -135,11 +136,24 @@ function cmdCatalog(argv) {
 
 // state — snapshot estruturado do repo pra a plataforma agregar ("onde cada sistema parou"),
 // independente do agente. Sempre JSON. project vem do config.
+// repo de origem ("org/name") — deixa a plataforma (Ex) ler as docs do produto via GitHub pull.
+// Fonte: campo `repo` no config; fallback pro `git remote origin`.
+function resolveRepo(cfg) {
+  if (cfg && typeof cfg.repo === 'string' && cfg.repo.trim()) return cfg.repo.trim();
+  try {
+    const url = execSync('git config --get remote.origin.url', { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    const m = url.match(/[:/]([^/:]+\/[^/]+?)(?:\.git)?$/);
+    return m ? m[1] : null;
+  } catch { return null; }
+}
+
 function cmdState() {
   let project = path.basename(cwd);
-  try { project = JSON.parse(fs.readFileSync(path.join(cwd, '.ttechspec', CONFIG), 'utf8')).project || project; } catch {}
+  let cfg = null;
+  try { cfg = JSON.parse(fs.readFileSync(path.join(cwd, '.ttechspec', CONFIG), 'utf8')); project = cfg.project || project; } catch {}
   const snapshot = {
     project,
+    repo: resolveRepo(cfg),
     generatedAt: new Date().toISOString(),
     gate: auditData(),
     specs: clarifyData(),
