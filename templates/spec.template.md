@@ -11,6 +11,11 @@
 
 ## Anti-padrões
 
+## Tasks
+<!-- Clareza do que JÁ virou código vs o que falta — checkbox GitHub-padrão. [x] = pronto, [ ] = falta.
+     O `ttechspec clarify` mostra feito/total; o `state` agrega por sistema pra plataforma (sem prompt). -->
+- [ ] <primeira coisa a construir>
+
 ## Checklist antes de subir
 
 ## Clarifications

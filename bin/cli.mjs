@@ -76,7 +76,7 @@ function clarifyData() {
   const rule = (config.rules || []).find((r) => r.type === 'spec-clarity')
     || { id: 'spec-clarity', type: 'spec-clarity', include: ['.ttechspec/specs/**/*.md'], exclude: ['**/_template.md'] };
   const rows = (specClarity(rule, cwd, walk(cwd)).rows || [])
-    .map((r) => ({ file: r.file, title: r.title, pending: r.pend, lines: r.lines, clarified: r.hasClar }));
+    .map((r) => ({ file: r.file, title: r.title, pending: r.pend, lines: r.lines, clarified: r.hasClar, tasks: r.tasks }));
   const top = rows.find((r) => r.pending > 0) || null;
   return { specs: rows, pendingTotal: rows.reduce((a, r) => a + r.pending, 0), resumeAt: top ? top.file : null };
 }
@@ -112,10 +112,13 @@ function cmdClarify(argv) {
   if (wantsJson(argv)) { console.log(JSON.stringify(d, null, 2)); return; }
   if (d.specs.length === 0) { console.log('Nenhuma spec encontrada em .ttechspec/specs/.'); return; }
   console.log(`${C.b}${d.specs.length} specs${C.x} — ordenadas por pendência (TODO / [NEEDS CLARIFICATION] / ???):\n`);
-  console.log(`${C.dim}  #  Pend  Linhas  Clar  Spec${C.x}`);
+  console.log(`${C.dim}  #  Pend  Feito  Clar  Spec${C.x}`);
   d.specs.forEach((r, i) => {
     const clar = r.clarified ? `${C.grn}sim ${C.x}` : `${C.yel}não ${C.x}`;
-    console.log(`  ${String(i + 1).padStart(2)}  ${String(r.pending).padStart(4)}  ${String(r.lines).padStart(6)}  ${clar}  ${r.title} ${C.dim}(${path.basename(r.file)})${C.x}`);
+    const t = r.tasks || { total: 0, done: 0 };
+    const prog = t.total ? `${t.done}/${t.total}` : ` - `;
+    const progC = t.total && t.done === t.total ? `${C.grn}${prog.padStart(5)}${C.x}` : prog.padStart(5);
+    console.log(`  ${String(i + 1).padStart(2)}  ${String(r.pending).padStart(4)}  ${progC}  ${clar}  ${r.title} ${C.dim}(${path.basename(r.file)})${C.x}`);
   });
   console.log(d.resumeAt
     ? `\n${C.dim}Retomar por: ${path.basename(d.resumeAt)} (mais pendências).${C.x}`

@@ -23,7 +23,9 @@ O catálogo registra o que existe. Nada depende de alguém lembrar.
 
 **Feedback (fecha o ciclo):** quando o **AUDIT** reprova um caso, isso vira uma nova **SPEC** — e o ciclo recomeça.
 
-1. **Spec** desenha o certo (decisão + contrato + anti-padrões).
+1. **Spec** desenha o certo (decisão + contrato + anti-padrões). A seção `## Tasks` (checkbox
+   GitHub-padrão) deixa a spec honesta sobre o que **já virou código** (`[x]`) vs o que **falta** (`[ ]`):
+   o `clarify` mostra feito/total e o `state` agrega por sistema — visibilidade sem depender de prompt.
 2. **Skill** automatiza o fluxo guiado que a spec descreve (slash command).
 3. **Convenção** destila a regra absoluta e curta que a spec implica.
 4. **Audit (sentinela)** transforma a convenção em gate de pre-commit/CI — recusa o errado.

@@ -109,6 +109,25 @@ function clarHasContent(txt) {
   return false;
 }
 
+// tasks: clareza do que JÁ virou código vs o que falta, dentro da própria spec (não um backlog à parte).
+// Lê os checkboxes GitHub-padrão (- [ ] / - [x]) da seção ## Tasks. Box marcado = pronto; vazio = falta.
+// Para a plataforma agregar "quanto de cada sistema está feito" via state, sem prompt.
+function parseTasks(txt) {
+  const lines = txt.split('\n');
+  const i = lines.findIndex((l) => /^##\s+Tasks\b/i.test(l.trim()));
+  const items = [];
+  if (i >= 0) {
+    for (let j = i + 1; j < lines.length; j++) {
+      const t = lines[j].trim();
+      if (t.startsWith('## ')) break; // próxima seção
+      const m = t.match(/^[-*]\s+\[([ xX])\]\s+(.+)$/);
+      if (m) items.push({ text: m[2].trim(), done: m[1].toLowerCase() === 'x' });
+    }
+  }
+  const done = items.filter((t) => t.done).length;
+  return { total: items.length, done, open: items.length - done, items };
+}
+
 export function specClarity(rule, root, files) {
   const sel = selectFiles(files, rule.include, rule.exclude);
   const markers = rule.markers || ['\\[NEEDS CLARIFICATION\\]', '\\bTODO\\b', '\\?\\?\\?'];
@@ -119,8 +138,9 @@ export function specClarity(rule, root, files) {
     const pend = (txt.match(re) || []).length;
     const lines = txt.split('\n').length;
     const hasClar = clarHasContent(txt);
+    const tasks = parseTasks(txt);
     const title = (txt.match(/^#\s+(.+)$/m) || [])[1] || path.basename(f);
-    rows.push({ file: f, title: title.trim(), pend, lines, hasClar });
+    rows.push({ file: f, title: title.trim(), pend, lines, hasClar, tasks });
   }
   rows.sort((a, b) => b.pend - a.pend);
   const offenders = rows.filter((r) => r.pend > (rule.maxPending ?? 0));
