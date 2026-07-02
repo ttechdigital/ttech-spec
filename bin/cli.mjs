@@ -150,20 +150,26 @@ function yamlList(txt, key) {
 }
 
 function catalogData() {
-  const dir = path.join(cwd, '.ttechspec', 'modules');
+  // catalogDir configurável: o catálogo do consumidor pode morar onde ele já tem (ex: a Ex usa
+  // docs/modules/). Default .ttechspec/modules/. yamlScalar acha a chave mesmo aninhada (metadata.slug).
+  let catalogDir = path.join('.ttechspec', 'modules');
+  try { const cfg = JSON.parse(fs.readFileSync(path.join(cwd, '.ttechspec', CONFIG), 'utf8')); if (cfg.catalogDir) catalogDir = cfg.catalogDir; } catch {}
+  const dir = path.join(cwd, catalogDir);
   const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f) && !f.startsWith('_')).sort() : [];
   const modules = files.map((f) => {
     const txt = fs.readFileSync(path.join(dir, f), 'utf8');
-    const slug = (yamlScalar(txt, 'slug') || '?').trim();
+    const slug = yamlScalar(txt, 'slug');
+    if (!slug) return null; // yaml sem slug não é módulo (ex: architecture.yaml)
     // campos tipados + relações (à la Backstage) — viram grafo no visualizador multi-produto.
+    // tolera schema aninhado/k8s-style: lifecycle cai pra `status` se não houver `lifecycle`.
     return {
-      slug, file: f,
-      owner: yamlScalar(txt, 'owner'), lifecycle: yamlScalar(txt, 'lifecycle'), type: yamlScalar(txt, 'type'),
+      slug: slug.trim(), file: f,
+      owner: yamlScalar(txt, 'owner'), lifecycle: yamlScalar(txt, 'lifecycle') || yamlScalar(txt, 'status'), type: yamlScalar(txt, 'type') || yamlScalar(txt, 'kind'),
       dependsOn: yamlList(txt, 'dependsOn'), partOf: yamlList(txt, 'partOf'),
-      hasSurface: /^\s*surface:/m.test(txt), hasHistory: /^\s*history:/m.test(txt),
+      hasSurface: /^\s*(surface|spec|endpoints):/m.test(txt), hasHistory: /^\s*(history|changelog):/m.test(txt),
     };
-  });
-  return { modules, total: modules.length, incomplete: modules.filter((m) => !m.hasSurface || !m.hasHistory).length };
+  }).filter(Boolean);
+  return { catalogDir, modules, total: modules.length, incomplete: modules.filter((m) => !m.hasSurface || !m.hasHistory).length };
 }
 
 const wantsJson = (argv) => argv.includes('--json');
@@ -213,7 +219,7 @@ function cmdCatalog(argv) {
   const d = catalogData();
   if (wantsJson(argv)) { console.log(JSON.stringify(d, null, 2)); return; }
   if (d.total === 0) { console.log('Nenhum module.yaml em .ttechspec/modules/.'); return; }
-  console.log(`${C.b}${d.total} módulos${C.x} (.ttechspec/modules/):\n`);
+  console.log(`${C.b}${d.total} módulos${C.x} (${d.catalogDir}/):\n`);
   console.log(`${C.dim}  Slug                    Surf  Hist  Owner            Lifecycle  Relações${C.x}`);
   const mk = (ok) => (ok ? `${C.grn}✓${C.x}` : `${C.yel}–${C.x}`);
   for (const m of d.modules) {

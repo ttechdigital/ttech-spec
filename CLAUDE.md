@@ -41,7 +41,11 @@ Reserva pra módulos futuros: Wolf (SaaS), Pigma (licenciamento), Katt (notifica
 - `paired-file` — cada arquivo X exige o irmão Y (`companionSuffix`).
 - `spec-clarity` — ranqueia/reprova specs por marcadores de pendência (`[NEEDS CLARIFICATION]`/TODO/???).
 - `spec-traceability` — reprova requisito (`FR-`/`SC-`/`NFR-###` na seção `## Requirements`) sem task que o referencie; `maxUncovered`, `failOrphans`.
+- `catalog-coverage` — cada dir de módulo em `modulesDir` exige `{slug}.ext` em `catalogDir` (mantém código↔catálogo).
 - `script` — escape hatch: roda um comando, ok se exit == `expectExit`.
+
+Catálogo: `catalogDir` no config aponta onde o `module.yaml` mora (default `.ttechspec/modules/`; a Ex usa
+`docs/modules/`). O parser tolera schema aninhado (`metadata.slug`) e `status`↔`lifecycle`.
 
 Transversal a todos: `severity` (`fail`/`warn`/`info`), `because` (razão surfada na saída/SARIF), supressão inline
 `// ttechspec-ignore: <id>`, e `waivers` no config (motivo + `expires`). `audit` tem `--sarif` e `--observe`.

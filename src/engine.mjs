@@ -271,12 +271,28 @@ function runScript(rule, root) {
   }
 }
 
+// catalog-coverage: mantém CÓDIGO ↔ CATÁLOGO na mesma página. Cada dir de módulo em `modulesDir`
+// exige o {slug}.ext em `catalogDir`. Generaliza o module-coverage.mjs que a Ex reinventou como script.
+// naming default: PascalCase → kebab (AiInsights → ai-insights). Pega "feature sem doc" (o lixo perdido).
+function runCatalogCoverage(rule, root) {
+  const kebab = (s) => s.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+  const modulesDir = path.join(root, rule.modulesDir || '');
+  const catalogDir = rule.catalogDir || '.ttechspec/modules';
+  const ext = rule.ext || '.yaml';
+  let dirs = [];
+  try { dirs = fs.readdirSync(modulesDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name); } catch {}
+  const missing = dirs.filter((m) => !fs.existsSync(path.join(root, catalogDir, kebab(m) + ext)));
+  const hits = missing.map((m) => `${rule.modulesDir}/${m} (falta ${kebab(m)}${ext} em ${catalogDir})`);
+  return mkResult(rule, 'fail', missing.length === 0, `${dirs.length - missing.length}/${dirs.length} módulos com catálogo`, hits, 0);
+}
+
 const RUNNERS = {
   'forbidden-pattern': runForbidden,
   'baseline-count': runBaseline,
   'paired-file': runPaired,
   'spec-clarity': specClarity,
   'spec-traceability': specTraceability,
+  'catalog-coverage': runCatalogCoverage,
   'script': runScript,
 };
 
