@@ -91,9 +91,15 @@ function runForbidden(rule, root, files) {
 // Null se não há git/ref (→ runBaseline cai no modo contagem-total). Base do ratchet diff-aware:
 // em vez de um inteiro que deriva e dá pra burlar, conta só o que ESTE PR introduziu (Sonar "New Code").
 function addedLines(root, ref) {
-  let out;
-  try { out = execSync(`git diff --unified=0 --no-color ${ref} -- .`, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); }
-  catch { return null; }
+  const tryDiff = (r) => {
+    try { return execSync(`git diff --unified=0 --no-color ${r} -- .`, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); }
+    catch { return null; }
+  };
+  // No CI o branch base só existe como origin/main (checkout não cria o ref local). Fallback pra
+  // origin/<ref> evita o footgun de "referenceBranch: main" cair no modo total-count e reprovar o legado.
+  let out = tryDiff(ref);
+  if (out === null && !ref.includes('/')) out = tryDiff(`origin/${ref}`);
+  if (out === null) return null;
   const map = new Map();
   let cur = null, newLine = 0;
   for (const line of out.split('\n')) {
