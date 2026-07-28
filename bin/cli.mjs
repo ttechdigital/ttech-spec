@@ -125,7 +125,14 @@ function clarifyData() {
     a.tasksDone += r.tasks?.done || 0; a.tasksTotal += r.tasks?.total || 0;
     return a;
   }, { done: 0, 'in-progress': 0, backlog: 0, 'no-tasks': 0, tasksDone: 0, tasksTotal: 0 });
-  return { specs: rows, pendingTotal: rows.reduce((a, r) => a + r.pending, 0), resumeAt: top ? top.file : null, rollup };
+  // rollup de traceability (cobertura requisito→task) — surfa o incentivo de adotar FR IDs
+  const traceRollup = rows.reduce((a, r) => {
+    a.defined += r.trace?.defined || 0; a.covered += r.trace?.covered || 0;
+    a.orphans += r.trace?.orphans?.length || 0; a.specsWithReqs += (r.trace?.defined ? 1 : 0);
+    return a;
+  }, { defined: 0, covered: 0, orphans: 0, specsWithReqs: 0 });
+  traceRollup.pct = traceRollup.defined ? Math.round(100 * traceRollup.covered / traceRollup.defined) : null;
+  return { specs: rows, pendingTotal: rows.reduce((a, r) => a + r.pending, 0), resumeAt: top ? top.file : null, rollup, traceRollup };
 }
 
 // parse YAML minimalista (zero-dep): escalar `key: val` e lista (`key:` seguido de `- item`).
@@ -232,17 +239,22 @@ function cmdClarify(argv) {
   if (wantsJson(argv)) { console.log(JSON.stringify(d, null, 2)); return; }
   if (d.specs.length === 0) { console.log('Nenhuma spec encontrada em .ttechspec/specs/.'); return; }
   console.log(`${C.b}${d.specs.length} specs${C.x} — ordenadas por pendência (TODO / [NEEDS CLARIFICATION] / ???):\n`);
-  console.log(`${C.dim}  #  Pend  Feito  Clar  Spec${C.x}`);
+  console.log(`${C.dim}  #  Pend  Feito  Cob    Clar  Spec${C.x}`);
   d.specs.forEach((r, i) => {
     const clar = r.clarified ? `${C.grn}sim ${C.x}` : `${C.yel}não ${C.x}`;
     const t = r.tasks || { total: 0, done: 0 };
     const prog = t.total ? `${t.done}/${t.total}` : ` - `;
     const progC = t.total && t.done === t.total ? `${C.grn}${prog.padStart(5)}${C.x}` : prog.padStart(5);
-    console.log(`  ${String(i + 1).padStart(2)}  ${String(r.pending).padStart(4)}  ${progC}  ${clar}  ${r.title} ${C.dim}(${path.basename(r.file)})${C.x}`);
+    const tr = r.trace || { defined: 0, covered: 0 };
+    const cob = tr.defined ? `${tr.covered}/${tr.defined}` : ` - `;
+    const cobC = tr.defined && tr.covered === tr.defined ? `${C.grn}${cob.padStart(5)}${C.x}` : (tr.defined ? `${C.yel}${cob.padStart(5)}${C.x}` : cob.padStart(5));
+    console.log(`  ${String(i + 1).padStart(2)}  ${String(r.pending).padStart(4)}  ${progC}  ${cobC}  ${clar}  ${r.title} ${C.dim}(${path.basename(r.file)})${C.x}`);
   });
+  const tr = d.traceRollup;
+  if (tr && tr.defined) console.log(`\n${C.dim}Traceability: ${tr.covered}/${tr.defined} requisitos cobertos (${tr.pct}%) em ${tr.specsWithReqs}/${d.specs.length} specs${tr.orphans ? `, ${tr.orphans} órfão(s)` : ''}.${C.x}`);
   console.log(d.resumeAt
-    ? `\n${C.dim}Retomar por: ${path.basename(d.resumeAt)} (mais pendências).${C.x}`
-    : `\n${C.grn}Todas as specs sem pendências.${C.x}`);
+    ? `${C.dim}Retomar por: ${path.basename(d.resumeAt)} (mais pendências).${C.x}`
+    : `${C.grn}Todas as specs sem pendências.${C.x}`);
 }
 
 // catalog (codinome ROB 64): lista + valida o registro de módulos (.ttechspec/modules/*.yaml).
@@ -324,6 +336,11 @@ switch (cmd) {
   case 'dod': cmdDod(rest); break;
   case 'state': cmdState(); break;
   case 'agents': cmdAgents(); break;
+  case '--version': case '-V': {
+    try { console.log(JSON.parse(fs.readFileSync(path.join(PKG, 'package.json'), 'utf8')).version); }
+    catch { console.log('?'); }
+    break;
+  }
   default:
     console.log(`${C.b}ttechspec${C.x} — gate de arquitetura como código + método spec→skill→convenção→audit→catálogo\n`);
     console.log('  ttechspec init      scaffolda .ttechspec/ + base + slash commands');
