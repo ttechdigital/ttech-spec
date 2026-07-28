@@ -292,6 +292,59 @@ function runCatalogCoverage(rule, root) {
   return mkResult(rule, 'fail', missing.length === 0, `${dirs.length - missing.length}/${dirs.length} módulos com catálogo`, hits, 0);
 }
 
+// Arquivos ADICIONADOS vs a ref (git diff --diff-filter=A). Fallback origin/<ref> (CI). Base do
+// ratchet por-arquivo: "só o NOVO precisa cumprir; legado grandfathered" — sem store .txt na mão.
+function addedFiles(root, ref) {
+  const tryd = (r) => { try { return execSync(`git diff --name-only --diff-filter=A ${r} -- .`, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return null; } };
+  let out = tryd(ref);
+  if (out === null && !ref.includes('/')) out = tryd(`origin/${ref}`);
+  if (out === null) return null;
+  return new Set(out.split('\n').map((s) => s.trim()).filter(Boolean));
+}
+
+// cross-reference: todo símbolo DEFINIDO (padrão em `define`, com captura) precisa aparecer
+// REFERENCIADO (padrão em `reference`, com {name}). Generaliza "toda IMcpTool registrada no DI",
+// "toda migration aplicada", "toda rota no router". Tira o mcp-tools-registered do escape hatch script.
+function runCrossReference(rule, root, files) {
+  const def = rule.define || {}, ref = rule.reference || {};
+  const cap = def.capture ?? 1;
+  const defined = new Map(); // name -> primeiro file:line
+  for (const f of selectFiles(files, def.include, def.exclude)) {
+    fs.readFileSync(path.join(root, f), 'utf8').split('\n').forEach((ln, i) => {
+      const m = ln.match(new RegExp(def.pattern, def.flags || ''));
+      if (m && m[cap] && !defined.has(m[cap])) defined.set(m[cap], `${f}:${i + 1}`);
+    });
+  }
+  const refText = selectFiles(files, ref.include, ref.exclude).map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
+  const hits = [];
+  for (const [name, loc] of defined) {
+    const pat = (ref.pattern || '{name}').replace(/\{name\}/g, name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    if (!new RegExp(pat).test(refText)) hits.push(`${name} (${loc}) não referenciado`);
+  }
+  return mkResult(rule, 'fail', hits.length === 0, `${defined.size - hits.length}/${defined.size} referenciados`, hits, 0);
+}
+
+// catalog-field: toda entrada do catálogo (yaml em catalogDir) tem o campo exigido. Com referenceBranch,
+// só exige em arquivo NOVO (ratchet — legado grandfathered, sem baseline .txt). É o platform-test-coverage.
+function runCatalogField(rule, root) {
+  const catalogDir = rule.catalogDir || path.join('.ttechspec', 'modules');
+  const field = rule.field;
+  let ymls = [];
+  try { ymls = fs.readdirSync(path.join(root, catalogDir)).filter((f) => /\.ya?ml$/.test(f) && !f.startsWith('_')); } catch {}
+  const onlyNew = rule.referenceBranch ? addedFiles(root, rule.referenceBranch) : null;
+  const hits = [];
+  let checked = 0;
+  for (const f of ymls) {
+    const rel = path.join(catalogDir, f);
+    if (onlyNew && !onlyNew.has(rel)) continue;
+    checked++;
+    const txt = fs.readFileSync(path.join(root, rel), 'utf8');
+    if (!new RegExp(`^\\s*${field}:`, 'm').test(txt)) hits.push(`${rel} (falta campo ${field})`);
+  }
+  const scope = onlyNew ? ' (novos vs ' + rule.referenceBranch + ')' : '';
+  return mkResult(rule, 'fail', hits.length === 0, `${checked - hits.length}/${checked} com ${field}${scope}`, hits, 0);
+}
+
 const RUNNERS = {
   'forbidden-pattern': runForbidden,
   'baseline-count': runBaseline,
@@ -299,6 +352,8 @@ const RUNNERS = {
   'spec-clarity': specClarity,
   'spec-traceability': specTraceability,
   'catalog-coverage': runCatalogCoverage,
+  'catalog-field': runCatalogField,
+  'cross-reference': runCrossReference,
   'script': runScript,
 };
 

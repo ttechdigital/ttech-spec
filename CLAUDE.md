@@ -42,6 +42,8 @@ Reserva pra módulos futuros: Wolf (SaaS), Pigma (licenciamento), Katt (notifica
 - `spec-clarity` — ranqueia/reprova specs por marcadores de pendência (`[NEEDS CLARIFICATION]`/TODO/???).
 - `spec-traceability` — reprova requisito (`FR-`/`SC-`/`NFR-###` na seção `## Requirements`) sem task que o referencie; `maxUncovered`, `failOrphans`.
 - `catalog-coverage` — cada dir de módulo em `modulesDir` exige `{slug}.ext` em `catalogDir` (mantém código↔catálogo).
+- `catalog-field` — toda entrada do catálogo tem o campo `field`; com `referenceBranch`, só exige em arquivo novo (ratchet).
+- `cross-reference` — todo símbolo capturado por `define` (pattern+capture) aparece referenciado em `reference` (pattern com `{name}`). Ex: toda IMcpTool registrada no DI.
 - `script` — escape hatch: roda um comando, ok se exit == `expectExit`.
 
 Catálogo: `catalogDir` no config aponta onde o `module.yaml` mora (default `.ttechspec/modules/`; a Ex usa

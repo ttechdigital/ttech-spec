@@ -75,6 +75,8 @@ precisar de prompt.
 - **spec-clarity** — reprova specs com pendência não resolvida (`[NEEDS CLARIFICATION]`/TODO/???).
 - **spec-traceability** — reprova requisito (`FR-###`) sem task que o cubra; opcional `failOrphans` p/ task que cita requisito inexistente.
 - **catalog-coverage** — cada dir de módulo em `modulesDir` exige o `{slug}.ext` em `catalogDir` (mantém código↔catálogo na mesma página).
+- **catalog-field** — toda entrada do catálogo tem um campo exigido (`field`); com `referenceBranch`, só cobra em módulo **novo** (legado grandfathered).
+- **cross-reference** — todo símbolo definido (`define`: pattern + capture) precisa aparecer referenciado (`reference`: pattern com `{name}`). *Ex: toda `IMcpTool` registrada no DI, toda migration aplicada.*
 - **script** — escape hatch: roda um comando, ok se o exit bate com o esperado.
 
 O catálogo (`module.yaml`) mora onde você já tem: `catalogDir` no config aponta o diretório (default `.ttechspec/modules/`). O parser tolera schema aninhado (`metadata.slug`) e `status`↔`lifecycle`, e o `state` emite o grafo (owner/lifecycle/dependsOn/partOf) pro visualizador multi-produto.
