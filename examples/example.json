@@ -2,16 +2,43 @@
   "$schema": "https://ttech.digital/ttechspec/config.schema.json",
   "version": "0.1.0",
   "project": "my-app",
-  "_nota": "Exemplo de config de um consumidor. HERDA a base do próprio repo via extends (presets em .ttechspec/presets/, semeados pelo init) e adiciona só o específico do projeto. Os valores são placeholders — troque pelos seus.",
-  "extends": ["dotnet", "web"],
+  "repo": "acme/my-app",
+  "_nota": "Config de REFERÊNCIA — mostra TODOS os tipos de regra + catalogDir + waivers + Definition of Done. Os valores são PLACEHOLDERS (acme-*, apps/api/Modules, ...): copie e troque pelos seus. HERDA a base do próprio repo via extends (presets em .ttechspec/presets/, semeados pelo init e seus pra editar). O TTech Spec não é dono da sua base.",
+  "extends": ["base", "dotnet", "web"],
+  "catalogDir": "docs/modules",
+
+  "waivers": [
+    { "rule": "allow-anonymous-baseline", "reason": "endpoint /health legado — ticket ACME-123", "expires": "2026-12-31" }
+  ],
+
+  "definitionOfDone": {
+    "_doc": "Pilares que juntos definem 'feature pronta'. state.dod.byModule reporta verde/total por módulo pro visualizador.",
+    "pillars": {
+      "doc": "module-coverage",
+      "capability": "tools-registered",
+      "tests": "tests-declared"
+    }
+  },
+
   "rules": [
+    {
+      "id": "no-secret-in-response",
+      "type": "forbidden-pattern",
+      "severity": "fail",
+      "because": "segredo em response vaza credencial",
+      "description": "não retornar segredo/token no corpo da resposta",
+      "include": ["apps/api/**/*.cs"],
+      "pattern": "return.*(Secret|Password|Token)\\s*="
+    },
     {
       "id": "allow-anonymous-baseline",
       "type": "baseline-count",
       "severity": "fail",
-      "description": "endpoints públicos não podem crescer do baseline",
+      "because": "cada endpoint anônimo novo é superfície de ataque",
+      "description": "ratchet diff-aware: nenhum [AllowAnonymous] NOVO vs main (legado grandfathered)",
       "include": ["apps/api/**/*.cs"],
       "pattern": "\\[AllowAnonymous\\]",
+      "referenceBranch": "main",
       "baseline": 0
     },
     {
@@ -19,25 +46,70 @@
       "type": "baseline-count",
       "severity": "fail",
       "ignoreComments": true,
-      "description": "IDs/refs hardcoded de cliente/ambiente — externalize em config (baseline: não crescer)",
+      "description": "IDs/refs de cliente hardcoded — externalize (baseline inteiro; ou use referenceBranch)",
       "include": ["src/**/*", "apps/**/*"],
       "exclude": ["**/tests/**", "**/__tests__/**", "**/*.test.*"],
-      "pattern": "acme-prod-[0-9]+|acme-legacy-[a-z]+|00000000-0000-0000-0000-000000000000",
+      "pattern": "acme-prod-[0-9]+|00000000-0000-0000-0000-000000000000",
       "baseline": 0
     },
     {
-      "id": "page-max-width",
-      "type": "forbidden-pattern",
+      "id": "migration-designer",
+      "type": "paired-file",
       "severity": "fail",
-      "description": "classe de largura aposentada (use o primitivo de layout do projeto)",
-      "include": ["apps/web/**/page.tsx"],
-      "pattern": "max-w-4xl"
+      "description": "cada migration exige o .Designer.cs irmão",
+      "include": ["**/Migrations/*.cs"],
+      "exclude": ["**/*.Designer.cs"],
+      "companionSuffix": ".Designer.cs"
+    },
+    {
+      "id": "spec-clarity",
+      "type": "spec-clarity",
+      "severity": "warn",
+      "description": "specs com pendência não resolvida ([NEEDS CLARIFICATION]/TODO/???)",
+      "include": [".ttechspec/specs/**/*.md"],
+      "exclude": ["**/_template.md"],
+      "maxPending": 0
+    },
+    {
+      "id": "spec-traceability",
+      "type": "spec-traceability",
+      "severity": "warn",
+      "description": "requisito (FR-###) na ## Requirements sem task que o cubra; failOrphans pega task citando FR inexistente",
+      "include": [".ttechspec/specs/**/*.md"],
+      "exclude": ["**/_template.md"],
+      "failOrphans": true
+    },
+    {
+      "id": "module-coverage",
+      "type": "catalog-coverage",
+      "severity": "fail",
+      "description": "todo apps/api/Modules/X tem docs/modules/{x}.yaml (código↔catálogo)",
+      "modulesDir": "apps/api/Modules",
+      "catalogDir": "docs/modules"
+    },
+    {
+      "id": "tests-declared",
+      "type": "catalog-field",
+      "severity": "fail",
+      "description": "módulo NOVO declara o campo 'platformTests' no catálogo (ratchet: legado grandfathered)",
+      "catalogDir": "docs/modules",
+      "field": "platformTests",
+      "referenceBranch": "main"
+    },
+    {
+      "id": "tools-registered",
+      "type": "cross-reference",
+      "severity": "fail",
+      "because": "tool não registrada existe mas nunca aparece",
+      "description": "todo símbolo definido aparece referenciado — ex: toda IMcpTool registrada no DI",
+      "define": { "include": ["apps/api/Modules/**/Tools/*.cs"], "pattern": "sealed\\s+class\\s+(\\w+)\\s*:\\s*IMcpTool\\b", "capture": 1 },
+      "reference": { "include": ["apps/api/Extensions/ServiceCollectionExtensions.cs"], "pattern": "IMcpTool,\\s*[\\w.]*{name}\\b" }
     },
     {
       "id": "i18n-drift",
       "type": "script",
       "severity": "fail",
-      "description": "escape hatch: check custom do consumidor (ele é dono do script)",
+      "description": "escape hatch: check custom do consumidor (ele é dono do script) — pro que não cabe nos tipos",
       "run": "node .ttechspec/checks/i18n-drift.mjs"
     }
   ]

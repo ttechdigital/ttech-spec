@@ -1,6 +1,6 @@
 {
   "name": "@ttechdigital/ttechspec",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Gate de arquitetura como código (regras-como-dado que reprovam o PR) + método spec→skill→convenção→audit→catálogo. O consumidor é dono da base.",
   "type": "module",
   "bin": {

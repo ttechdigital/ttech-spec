@@ -68,7 +68,9 @@ precisar de prompt.
 
 ## O gate = regras como dado
 
-`.ttechspec/ttechspec.config.json` lista as regras. Seis tipos:
+Config de referência com **todos** os tipos + catalogDir + waivers + Definition of Done (placeholders pra copiar): [`examples/example.json`](examples/example.json).
+
+`.ttechspec/ttechspec.config.json` lista as regras. Nove tipos:
 
 - **forbidden-pattern** — reprova se um padrão (regex) aparece. *Ex: catch vazio, segredo numa response.*
 - **baseline-count** — reprova se a contagem sobe do baseline. Com `referenceBranch`, conta só o que **o PR introduziu** (ratchet diff-aware, à prova de burla). *Ex: número de `[AllowAnonymous]`.*
