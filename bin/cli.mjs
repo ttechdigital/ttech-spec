@@ -172,6 +172,37 @@ function catalogData() {
   return { catalogDir, modules, total: modules.length, incomplete: modules.filter((m) => !m.hasSurface || !m.hasHistory).length };
 }
 
+// Definition of Done: bundle NOMEADO de regras (pilares) que juntas definem "feature pronta".
+// Report POR MÓDULO ("módulo X: 2/3 pilares verdes") pro visualizador multi-produto. Nasceu no uso
+// real da Ex (doc + MCP + testes). Deriva dos resultados do gate — não é regra nova, é uma visão.
+function dodData(auditD, catalogD, cfg) {
+  const dod = cfg && cfg.definitionOfDone;
+  if (!dod || !dod.pillars) return null;
+  const pascal = (slug) => slug.split(/[-_]/).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+  const modules = catalogD.modules || [];
+  const pillars = Object.entries(dod.pillars).map(([name, ruleId]) => {
+    const r = auditD.rules.find((x) => x.id === ruleId);
+    const offenders = (r && !r.ok && !r.waived) ? r.hits : [];
+    return { name, rule: ruleId, ok: !!r && offenders.length === 0, offenders, missingRule: !r };
+  });
+  // atribuição por módulo: um offender "pertence" ao módulo cujo slug/PascalCase ele nomeia
+  const modFail = new Map(); const unattributed = [];
+  for (const pil of pillars) for (const h of pil.offenders) {
+    const owners = modules.filter((m) => h.includes(m.slug) || h.includes(pascal(m.slug)));
+    if (!owners.length) { unattributed.push({ pillar: pil.name, hit: h }); continue; }
+    for (const m of owners) { if (!modFail.has(m.slug)) modFail.set(m.slug, new Set()); modFail.get(m.slug).add(pil.name); }
+  }
+  const byModule = modules.map((m) => {
+    const failed = modFail.get(m.slug) || new Set();
+    const status = {}; pillars.forEach((p) => { status[p.name] = !failed.has(p.name); });
+    return { slug: m.slug, pillars: status, green: pillars.length - failed.size, total: pillars.length };
+  });
+  return {
+    pillars: pillars.map((p) => ({ name: p.name, rule: p.rule, ok: p.ok, offenders: p.offenders.length, missingRule: p.missingRule })),
+    green: pillars.filter((p) => p.ok).length, total: pillars.length, byModule, unattributed,
+  };
+}
+
 const wantsJson = (argv) => argv.includes('--json');
 
 function cmdAudit(argv) {
@@ -246,15 +277,42 @@ function cmdState() {
   let project = path.basename(cwd);
   let cfg = null;
   try { cfg = JSON.parse(fs.readFileSync(path.join(cwd, '.ttechspec', CONFIG), 'utf8')); project = cfg.project || project; } catch {}
+  const gate = auditData();
+  const catalog = catalogData();
   const snapshot = {
     project,
     repo: resolveRepo(cfg),
     generatedAt: new Date().toISOString(),
-    gate: auditData(),
+    gate,
     specs: clarifyData(),
-    catalog: catalogData(),
+    catalog,
+    dod: dodData(gate, catalog, cfg),
   };
   console.log(JSON.stringify(snapshot, null, 2));
+}
+
+// dod — Definition of Done: pilares (bundle de regras) + verde/total por módulo.
+function cmdDod(argv) {
+  let cfg = null;
+  try { cfg = JSON.parse(fs.readFileSync(path.join(cwd, '.ttechspec', CONFIG), 'utf8')); } catch {}
+  const d = dodData(auditData(), catalogData(), cfg);
+  if (!d) { console.log('Sem definitionOfDone no config. Defina os pilares (nome → id de regra).'); return; }
+  if (wantsJson(argv)) { console.log(JSON.stringify(d, null, 2)); return; }
+  console.log(`${C.b}Definition of Done${C.x} — ${d.green}/${d.total} pilares verdes\n`);
+  console.log(`${C.dim}  Pilar            Regra                     Estado${C.x}`);
+  for (const p of d.pillars) {
+    const mark = p.missingRule ? `${C.yel}regra ausente${C.x}` : (p.ok ? `${C.grn}OK${C.x}` : `${C.red}FAIL (${p.offenders})${C.x}`);
+    console.log(`  ${p.name.padEnd(15)}  ${p.rule.padEnd(24)}  ${mark}`);
+  }
+  const incompletos = d.byModule.filter((m) => m.green < m.total);
+  if (incompletos.length) {
+    console.log(`\n${C.b}Módulos incompletos${C.x} (${incompletos.length}/${d.byModule.length}):`);
+    for (const m of incompletos.slice(0, argv.includes('-v') ? 999 : 15)) {
+      const faltam = Object.entries(m.pillars).filter(([, ok]) => !ok).map(([n]) => n).join(', ');
+      console.log(`  ${C.yel}${m.green}/${m.total}${C.x}  ${m.slug} ${C.dim}(falta: ${faltam})${C.x}`);
+    }
+  } else console.log(`\n${C.grn}Todos os ${d.byModule.length} módulos completos no DoD.${C.x}`);
+  if (d.unattributed.length) console.log(`\n${C.dim}${d.unattributed.length} violação(ões) não atribuídas a módulo (ver --json).${C.x}`);
 }
 
 const [, , cmd, ...rest] = process.argv;
@@ -263,6 +321,7 @@ switch (cmd) {
   case 'audit': cmdAudit(rest); break;
   case 'clarify': cmdClarify(rest); break;
   case 'catalog': cmdCatalog(rest); break;
+  case 'dod': cmdDod(rest); break;
   case 'state': cmdState(); break;
   case 'agents': cmdAgents(); break;
   default:
@@ -271,6 +330,7 @@ switch (cmd) {
     console.log('  ttechspec audit     roda o gate de sentinelas (exit!=0 reprova)   [--json|--sarif|--observe|-v]');
     console.log('  ttechspec clarify   ranqueia specs por pendência (estilo SDD)      [--json]');
     console.log('  ttechspec catalog   lista/valida o registro de módulos            [--json]');
+    console.log('  ttechspec dod       Definition of Done: pilares + verde/total por módulo [--json]');
     console.log('  ttechspec state     snapshot JSON (gate+specs+catalog) p/ a plataforma agregar');
     console.log('  ttechspec agents    (re)gera os slash commands (/clarify, /ttechspec-audit)');
     console.log(`\n${C.dim}Método: docs/METHOD.md · Workflow: docs/WORKFLOW.md${C.x}`);

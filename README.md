@@ -52,6 +52,7 @@ ttechspec init       # scaffolda .ttechspec/ (specs/ modules/ presets/ + config)
 ttechspec audit      # roda o gate — exit != 0 reprova (pre-commit + CI)
 ttechspec clarify    # ranqueia specs por pendência ([NEEDS CLARIFICATION]/TODO/???)
 ttechspec catalog    # lista/valida o registro de módulos (.ttechspec/modules/*.yaml)
+ttechspec dod        # Definition of Done: pilares (bundle de regras) + verde/total por módulo
 ttechspec state      # snapshot JSON (gate+specs+catalog) — pra uma plataforma agregar vários repos
 ttechspec agents     # (re)gera os slash commands /clarify e /ttechspec-audit (Claude Code)
 ```
@@ -80,6 +81,12 @@ precisar de prompt.
 - **script** — escape hatch: roda um comando, ok se o exit bate com o esperado.
 
 O catálogo (`module.yaml`) mora onde você já tem: `catalogDir` no config aponta o diretório (default `.ttechspec/modules/`). O parser tolera schema aninhado (`metadata.slug`) e `status`↔`lifecycle`, e o `state` emite o grafo (owner/lifecycle/dependsOn/partOf) pro visualizador multi-produto.
+
+**Definition of Done.** Agrupe regras em pilares nomeados que juntas definem "feature pronta":
+```json
+{ "definitionOfDone": { "pillars": { "doc": "catalog-coverage", "mcp": "mcp-registered", "tests": "tests-declared" } } }
+```
+`ttechspec dod` mostra os pilares e os módulos incompletos; o `state` emite `dod.byModule` (verde/total por módulo) pro visualizador — "módulo X: 2/3 pilares". Não é regra nova, é uma visão sobre o gate.
 
 Toda regra aceita `severity` (`fail`/`warn`/`info`) e `because` (a razão, surfada na saída e no SARIF).
 
